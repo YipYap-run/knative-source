@@ -19,27 +19,64 @@ package yipyapsource
 import (
 	"context"
 
+	"github.com/kelseyhightower/envconfig"
+	"go.uber.org/zap"
+
+	"k8s.io/client-go/tools/cache"
+
+	kubeclient "knative.dev/pkg/client/injection/kube/client"
+	deploymentinformer "knative.dev/pkg/client/injection/kube/informers/apps/v1/deployment"
 	"knative.dev/pkg/configmap"
 	"knative.dev/pkg/controller"
+	"knative.dev/pkg/logging"
+	"knative.dev/pkg/resolver"
 
+	"github.com/YipYap-run/knative-source/pkg/apis/sources/v1alpha1"
 	yipyapsourceinformer "github.com/YipYap-run/knative-source/pkg/client/injection/informers/sources/v1alpha1/yipyapsource"
 	yipyapsourcereconciler "github.com/YipYap-run/knative-source/pkg/client/injection/reconciler/sources/v1alpha1/yipyapsource"
 )
 
-// NewController registers the YipYapSource reconciler with the controller
-// impl. Wire-up is intentionally minimal here (Task 4.1 scaffolding); informers
-// for owned resources (Deployment, EventPolicy, etc.) are added in Tasks
-// 4.3 / 4.4 / 4.6.
+// envConfig pulls controller-wide settings out of env vars. The adapter image
+// is the only required knob today.
+type envConfig struct {
+	Image string `envconfig:"YIPYAP_SOURCE_RA_IMAGE" required:"true"`
+}
+
+// NewController builds the YipYapSource controller Impl. It wires informers
+// for both the YipYapSource itself and the Deployments it owns, reads the
+// adapter image from the environment, and installs a URIResolver backed by
+// the controller's built-in tracker for sink refs.
 func NewController(
 	ctx context.Context,
 	cmw configmap.Watcher,
 ) *controller.Impl {
+	env := &envConfig{}
+	if err := envconfig.Process("", env); err != nil {
+		logging.FromContext(ctx).Panicw("cannot process YIPYAP_SOURCE_RA_IMAGE", zap.Error(err))
+	}
+
+	deploymentInformer := deploymentinformer.Get(ctx)
 	yipyapSourceInformer := yipyapsourceinformer.Get(ctx)
 
-	r := &Reconciler{}
+	r := &Reconciler{
+		kubeClientSet:    kubeclient.Get(ctx),
+		deploymentLister: deploymentInformer.Lister(),
+		adapterImage:     env.Image,
+	}
 	impl := yipyapsourcereconciler.NewImpl(ctx, r)
 
+	// URIResolver is driven by the controller's tracker so that changes to
+	// Channel/Broker/etc. sink targets re-enqueue the owning YipYapSource.
+	r.sinkResolver = resolver.NewURIResolverFromTracker(ctx, impl.Tracker)
+
 	yipyapSourceInformer.Informer().AddEventHandler(controller.HandleAll(impl.Enqueue))
+
+	// Re-enqueue the YipYapSource when its owned Deployment changes so the
+	// Deployed/Ready conditions track availability promptly.
+	deploymentInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
+		FilterFunc: controller.FilterController(&v1alpha1.YipYapSource{}),
+		Handler:    controller.HandleAll(impl.EnqueueControllerOf),
+	})
 
 	return impl
 }
