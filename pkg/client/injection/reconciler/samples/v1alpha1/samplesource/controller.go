@@ -37,9 +37,9 @@ import (
 	logging "knative.dev/pkg/logging"
 	logkey "knative.dev/pkg/logging/logkey"
 	reconciler "knative.dev/pkg/reconciler"
-	versionedscheme "knative.dev/sample-source/pkg/client/clientset/versioned/scheme"
-	client "knative.dev/sample-source/pkg/client/injection/client"
-	samplesource "knative.dev/sample-source/pkg/client/injection/informers/samples/v1alpha1/samplesource"
+	versionedscheme "github.com/YipYap-run/knative-source/pkg/client/clientset/versioned/scheme"
+	client "github.com/YipYap-run/knative-source/pkg/client/injection/client"
+	samplesource "github.com/YipYap-run/knative-source/pkg/client/injection/informers/samples/v1alpha1/samplesource"
 )
 
 const (

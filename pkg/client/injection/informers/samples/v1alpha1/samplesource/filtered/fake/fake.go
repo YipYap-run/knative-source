@@ -24,8 +24,8 @@ import (
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 	logging "knative.dev/pkg/logging"
-	factoryfiltered "knative.dev/sample-source/pkg/client/injection/informers/factory/filtered"
-	filtered "knative.dev/sample-source/pkg/client/injection/informers/samples/v1alpha1/samplesource/filtered"
+	factoryfiltered "github.com/YipYap-run/knative-source/pkg/client/injection/informers/factory/filtered"
+	filtered "github.com/YipYap-run/knative-source/pkg/client/injection/informers/samples/v1alpha1/samplesource/filtered"
 )
 
 var Get = filtered.Get

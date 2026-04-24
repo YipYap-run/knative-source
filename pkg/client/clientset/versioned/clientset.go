@@ -25,7 +25,7 @@ import (
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
-	samplesv1alpha1 "knative.dev/sample-source/pkg/client/clientset/versioned/typed/samples/v1alpha1"
+	samplesv1alpha1 "github.com/YipYap-run/knative-source/pkg/client/clientset/versioned/typed/samples/v1alpha1"
 )
 
 type Interface interface {

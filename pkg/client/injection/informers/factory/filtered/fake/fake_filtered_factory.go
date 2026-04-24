@@ -25,9 +25,9 @@ import (
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 	logging "knative.dev/pkg/logging"
-	externalversions "knative.dev/sample-source/pkg/client/informers/externalversions"
-	fake "knative.dev/sample-source/pkg/client/injection/client/fake"
-	filtered "knative.dev/sample-source/pkg/client/injection/informers/factory/filtered"
+	externalversions "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions"
+	fake "github.com/YipYap-run/knative-source/pkg/client/injection/client/fake"
+	filtered "github.com/YipYap-run/knative-source/pkg/client/injection/informers/factory/filtered"
 )
 
 var Get = filtered.Get
