@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yipyap-source-webhook
+  namespace: {{ include "yipyap-source.namespace" . }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+    role: yipyap-source-webhook
+spec:
+  replicas: {{ .Values.webhook.replicas }}
+  selector:
+    matchLabels:
+      app: yipyap-source-webhook
+      role: yipyap-source-webhook
+  template:
+    metadata:
+      labels:
+        {{- include "yipyap-source.labels" . | nindent 8 }}
+        app: yipyap-source-webhook
+        role: yipyap-source-webhook
+    spec:
+      serviceAccountName: {{ include "yipyap-source.webhookServiceAccountName" . }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      affinity:
+        {{- with .Values.webhook.affinity }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: yipyap-source-webhook
+                topologyKey: kubernetes.io/hostname
+      {{- with .Values.webhook.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webhook.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: webhook
+          image: {{ include "yipyap-source.webhookImage" . }}
+          imagePullPolicy: {{ .Values.images.webhook.pullPolicy }}
+          terminationMessagePolicy: FallbackToLogsOnError
+          resources:
+            {{- toYaml .Values.webhook.resources | nindent 12 }}
+          env:
+            - name: SYSTEM_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CONFIG_LOGGING_NAME
+              value: config-logging
+            - name: CONFIG_OBSERVABILITY_NAME
+              value: config-observability
+            - name: METRICS_DOMAIN
+              value: knative.dev/sources
+            - name: WEBHOOK_NAME
+              value: yipyap-source-webhook
+            - name: WEBHOOK_SECRET_NAME
+              value: yipyap-source-webhook-certs
+            - name: WEBHOOK_PORT
+              value: {{ .Values.webhook.port | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
+            - name: https-webhook
+              containerPort: {{ .Values.webhook.port }}
+              protocol: TCP
+          readinessProbe: &probe
+            periodSeconds: 1
+            httpGet:
+              scheme: HTTPS
+              port: {{ .Values.webhook.port }}
+              httpHeaders:
+                - name: k-kubelet-probe
+                  value: "webhook"
+          livenessProbe: *probe

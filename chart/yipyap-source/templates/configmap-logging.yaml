@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-logging
+  namespace: {{ include "yipyap-source.namespace" . }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+data:
+  zap-logger-config: |-
+{{ index .Values.logging "zap-logger-config" | default "" | indent 4 }}
+  loglevel.controller: {{ .Values.logging.level | quote }}
+  loglevel.webhook: {{ .Values.logging.level | quote }}

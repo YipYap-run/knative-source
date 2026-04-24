@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-observability
+  namespace: {{ include "yipyap-source.namespace" . }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+data:
+  _example: |
+    # See https://github.com/knative/pkg/blob/main/metrics/config.go for the full list.
+    # Backend for system + request metrics.
+    metrics.backend-destination: prometheus
+    metrics.request-metrics-backend-destination: prometheus
+    # Opt-in extras (uncomment):
+    # profiling.enable: "true"
+    # sink.event-request-count-enabled: "true"

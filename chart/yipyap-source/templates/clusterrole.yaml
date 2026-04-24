@@ -1,0 +1,50 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "yipyap-source.controllerServiceAccountName" . }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: &everything ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["list"]
+
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: *everything
+
+  - apiGroups: ["sources.yipyap.run"]
+    resources: ["yipyapsources"]
+    verbs: *everything
+
+  - apiGroups: ["sources.yipyap.run"]
+    resources: ["yipyapsources/status", "yipyapsources/finalizers"]
+    verbs: ["get", "update", "patch"]
+
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list", "watch"]
+
+  # Leader election
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: *everything
+
+---
+# Aggregated source-observer role — grants read-only access to YipYapSources
+# under the Knative Eventing source duck.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: yipyap-source-observer
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+    duck.knative.dev/source: "true"
+rules:
+  - apiGroups: ["sources.eventing.knative.dev"]
+    resources: ["yipyapsources"]
+    verbs: ["get", "list", "watch"]
