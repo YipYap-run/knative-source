@@ -1,4 +1,4 @@
-# Copyright 2020 The Knative Authors
+# Copyright 2026 Cyra.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -11,63 +11,99 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# MutatingWebhookConfiguration — runs SetDefaults() on every YipYapSource.
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: defaulting.webhook.knative-sources.yipyap.run
+  name: defaulting.webhook.sources.yipyap.run
   labels:
     sources.yipyap.run/release: devel
 webhooks:
-  - admissionReviewVersions: ["v1", "v1beta1"]
+  - name: defaulting.webhook.sources.yipyap.run
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Fail
+    timeoutSeconds: 10
     clientConfig:
       service:
         name: yipyap-source-webhook
         namespace: yipyap-sources
-    sideEffects: None
-    failurePolicy: Fail
-    name: defaulting.webhook.knative-sources.yipyap.run
+        path: /defaulting
+    rules:
+      - apiGroups:   ["sources.yipyap.run"]
+        apiVersions: ["v1alpha1"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["yipyapsources"]
+        scope:       "Namespaced"
+
 ---
+# ValidatingWebhookConfiguration — runs Validate() on every YipYapSource.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: validation.webhook.knative-sources.yipyap.run
+  name: validation.webhook.sources.yipyap.run
   labels:
     sources.yipyap.run/release: devel
 webhooks:
-  - admissionReviewVersions: ["v1", "v1beta1"]
+  - name: validation.webhook.sources.yipyap.run
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Fail
+    timeoutSeconds: 10
     clientConfig:
       service:
         name: yipyap-source-webhook
         namespace: yipyap-sources
-    sideEffects: None
-    failurePolicy: Fail
-    name: validation.webhook.knative-sources.yipyap.run
+        path: /resource-validation
+    rules:
+      - apiGroups:   ["sources.yipyap.run"]
+        apiVersions: ["v1alpha1"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["yipyapsources"]
+        scope:       "Namespaced"
+
 ---
+# ValidatingWebhookConfiguration — validates our pinned ConfigMaps so bad
+# logging/observability configs are rejected at write time.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: config.webhook.knative-sources.yipyap.run
+  name: config.webhook.sources.yipyap.run
   labels:
     sources.yipyap.run/release: devel
 webhooks:
-  - admissionReviewVersions: ["v1", "v1beta1"]
+  - name: config.webhook.sources.yipyap.run
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Fail
+    timeoutSeconds: 10
     clientConfig:
       service:
         name: yipyap-source-webhook
         namespace: yipyap-sources
-    sideEffects: None
-    failurePolicy: Fail
-    name: config.webhook.knative-sources.yipyap.run
+        path: /config-validation
     namespaceSelector:
       matchExpressions:
         - key: sources.yipyap.run/release
           operator: Exists
+    objectSelector:
+      matchLabels:
+        app.kubernetes.io/component: yipyap-source
+    rules:
+      - apiGroups:   [""]
+        apiVersions: ["v1"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["configmaps"]
+        scope:       "Namespaced"
+
 ---
+# Webhook-cert Secret. Populated at startup by knative.dev/pkg/webhook/certificates
+# — self-signs a CA, no cert-manager dependency.
 apiVersion: v1
 kind: Secret
 metadata:
-  name: webhook-certs
+  name: yipyap-source-webhook-certs
   namespace: yipyap-sources
   labels:
     sources.yipyap.run/release: devel
-# The data is populated at install time.
+# The data is populated at install time by the webhook itself.
