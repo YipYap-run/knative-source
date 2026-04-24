@@ -1,0 +1,19 @@
+{{- if gt (int .Values.webhook.replicas) 1 }}
+# Pair with webhook.replicas > 1 to keep at least one webhook replica available
+# during voluntary disruptions (node drains, cluster upgrades). Without this,
+# a drain could take all webhook replicas down simultaneously and — with
+# failurePolicy: Fail — block all YipYapSource admission cluster-wide.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: yipyap-source-webhook
+  namespace: {{ include "yipyap-source.namespace" . }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: yipyap-source-webhook
+      role: yipyap-source-webhook
+{{- end }}

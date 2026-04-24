@@ -47,7 +47,10 @@ controller:
 
 # Webhook Deployment (validating + mutating admission).
 webhook:
-  replicas: 1
+  # Two replicas so webhook failurePolicy: Fail does not become a SPOF during
+  # rolling updates or node drains. A matching PodDisruptionBudget with
+  # minAvailable=1 is rendered automatically when replicas > 1.
+  replicas: 2
   resources:
     requests:
       cpu: 50m
