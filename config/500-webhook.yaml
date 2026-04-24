@@ -1,4 +1,4 @@
-# Copyright 2020 The Knative Authors
+# Copyright 2026 Cyra.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ spec:
 
       serviceAccountName: yipyap-source-webhook
       containers:
-        - name: yipyapsource-webhook
+        - name: webhook
           terminationMessagePolicy: FallbackToLogsOnError
           image: ko://github.com/YipYap-run/knative-source/cmd/webhook
           env:
@@ -52,10 +52,16 @@ spec:
                 fieldPath: metadata.namespace
           - name: CONFIG_LOGGING_NAME
             value: config-logging
+          - name: CONFIG_OBSERVABILITY_NAME
+            value: config-observability
           - name: METRICS_DOMAIN
-            value: knative.dev/eventing
+            value: knative.dev/sources
           - name: WEBHOOK_NAME
-            value: yipyapsource-webhook
+            value: yipyap-source-webhook
+          - name: WEBHOOK_SECRET_NAME
+            value: yipyap-source-webhook-certs
+          - name: WEBHOOK_PORT
+            value: "8443"
           - name: POD_NAME
             valueFrom:
               fieldRef:
@@ -63,6 +69,8 @@ spec:
           ports:
           - containerPort: 9090
             name: metrics
+          - containerPort: 8443
+            name: https-webhook
           readinessProbe: &probe
             periodSeconds: 1
             httpGet:
