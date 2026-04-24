@@ -26,13 +26,16 @@ images:
 # Controller Deployment.
 controller:
   replicas: 1
-  # scopedNamespaces (planned, see chart README) will restrict the controller's
-  # Secret read permission to the listed namespaces via a Role+RoleBinding pair
-  # per namespace instead of a cluster-wide ClusterRole. Default empty means
-  # cluster-wide access — the canonical Knative source pattern. Operators who
-  # cannot tolerate cluster-wide secret read should either pre-declare
-  # namespaces here (once supported) or wrap YipYapSource creation with an
-  # admission policy (Kyverno, OPA Gatekeeper).
+  # scopedNamespaces narrows the controller SA's namespace-scoped permissions
+  # (Deployments, ConfigMaps) from cluster-wide to a per-namespace Role +
+  # RoleBinding pair for each entry. Empty list (default) keeps the
+  # cluster-wide ClusterRole posture — the canonical Knative source pattern.
+  #
+  # Note: the controller SA NEVER had cluster-wide Secret read after
+  # security-review H-6. Secret resolution happens in the receive-adapter
+  # Pod via kubelet-side SecretKeyRef in the YipYapSource's namespace.
+  #
+  # Example: scopedNamespaces: ["team-a", "team-b"]
   scopedNamespaces: []
   resources:
     requests:
@@ -71,6 +74,18 @@ webhook:
 metrics:
   enabled: true
   port: 9090
+  # NetworkPolicy ingress for the metrics endpoint (security-review A6-N-1).
+  # Empty list (default) is `from: []` -> ANY namespace can scrape -> tenant
+  # pods can fingerprint controller version. Operators with a known
+  # monitoring namespace should set:
+  #   networkPolicy:
+  #     ingressFromNamespaceLabels:
+  #       kubernetes.io/metadata.name: monitoring
+  # which renders an ingress rule restricted to namespaces carrying the
+  # listed labels. Multiple key/value pairs are AND-combined within a
+  # single namespaceSelector.
+  networkPolicy:
+    ingressFromNamespaceLabels: {}
 
 # ServiceAccount names (for custom SA bindings).
 serviceAccounts:
