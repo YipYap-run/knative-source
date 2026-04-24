@@ -34,10 +34,93 @@ spec:
         status: {}
       schema:
         openAPIV3Schema:
+          # Static schema floor (security-review A5-NEW-1). Unknown fields are
+          # rejected at apiserver-side validation, even when the admission
+          # webhook is unavailable / failurePolicy=Ignore. The webhook
+          # (yipyapsource_validation.go + yipyapsource_defaults.go) still runs
+          # for cross-field semantics not expressible in OpenAPI.
           type: object
-          # Pending full OpenAPI schema; SetDefaults/Validate run via the
-          # admission webhook.
-          x-kubernetes-preserve-unknown-fields: true
+          required: [spec]
+          additionalProperties: false
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required: [apiKeyRef]
+              additionalProperties: false
+              properties:
+                apiKeyRef:
+                  type: object
+                  required: [name]
+                  additionalProperties: false
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                      maxLength: 253
+                      # Kubernetes Secret name: RFC 1123 DNS subdomain.
+                      pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                    key:
+                      type: string
+                      minLength: 1
+                      maxLength: 253
+                      pattern: '^[A-Za-z0-9._-]+$'
+                baseURL:
+                  type: string
+                  maxLength: 2048
+                  # Require an http(s) scheme; permissive on host since the
+                  # webhook performs SSRF + private-target validation.
+                  pattern: '^https?://[^\s]+$'
+                mode:
+                  type: string
+                  enum: ["", auto, poll, stream]
+                serviceAccountName:
+                  type: string
+                  maxLength: 253
+                  pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                filter:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    types:
+                      type: array
+                      maxItems: 1024
+                      items:
+                        type: string
+                        minLength: 1
+                        maxLength: 256
+                    monitorIDs:
+                      type: array
+                      maxItems: 1024
+                      items:
+                        type: string
+                        minLength: 1
+                        maxLength: 256
+                    severities:
+                      type: array
+                      maxItems: 8
+                      items:
+                        type: string
+                        enum: [info, warning, critical]
+                # Embedded duck-type fields from knative.dev/pkg/apis/duck/v1
+                # SourceSpec. These are well-formed Kubernetes destinations
+                # whose internal shape is governed by upstream Knative;
+                # preserve unknown fields ONLY inside this subtree so the
+                # outer spec stays strictly bounded.
+                sink:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                ceOverrides:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
       additionalPrinterColumns:
         - name: Ready
           type: string
