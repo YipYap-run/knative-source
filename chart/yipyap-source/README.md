@@ -62,7 +62,8 @@ See [`values.yaml`](./values.yaml) for the authoritative list. Highlights:
 | `images.adapter.repository` | `ghcr.io/yipyap-run/knative-source`                | Receive-adapter image the controller deploys per source.     |
 | `images.*.tag`              | `""`                                               | Falls back to `.Chart.AppVersion` when empty.                |
 | `controller.replicas`       | `1`                                                | Controller replicas.                                         |
-| `webhook.replicas`          | `1`                                                | Webhook replicas.                                            |
+| `controller.scopedNamespaces` | `[]`                                             | If non-empty, render a per-namespace `Role`+`RoleBinding` granting the controller SA Deployment/ConfigMap access only in those namespaces (see Security model). |
+| `webhook.replicas`          | `2`                                                | Webhook replicas (HA + PDB minAvailable=1).                  |
 | `webhook.failurePolicy`     | `Fail`                                             | Admission webhook failure policy (`Fail` / `Ignore`).        |
 | `webhook.port`              | `8443`                                             | HTTPS port the webhook listens on.                           |
 | `metrics.enabled`           | `true`                                             | Expose Prometheus metrics on `:9090`.                        |
@@ -70,33 +71,64 @@ See [`values.yaml`](./values.yaml) for the authoritative list. Highlights:
 
 ## Security model
 
-### Controller cluster-wide Secret access (by design)
+### Controller does NOT read Secrets cluster-wide
 
-The controller ClusterRole grants `get`/`list`/`watch` on `secrets` across the
-whole cluster. This is the canonical Knative source pattern: a `YipYapSource`
-can live in any namespace, and its `spec.apiKeyRef.name` points to a Secret in
-that same namespace which the controller must read at reconcile time to stamp
-the receive-adapter Deployment with the API key as an env var.
+After security-review H-6, the controller ClusterRole no longer grants any
+Secret access. The reconciler does not call `coreV1().Secrets().Get()`
+anywhere — the per-source API key Secret is resolved Pod-side at adapter
+startup via a `SecretKeyRef` envvar, scoped by kubelet to the
+YipYapSource's own namespace.
 
-Kubernetes RBAC cannot scope-by-resource-name on `secrets` in a ClusterRole
-when the names are not known up front, so the permission model is binary:
-either the controller watches all namespaces (current default, convenient) or
-operators pre-declare a scoped namespace list.
+This means a compromised controller SA cannot exfiltrate Secrets from
+unrelated tenants — the blast radius of an SA token compromise is bounded
+to the cluster-wide read of `configmaps`, `events`, and the
+namespace-scoped CRUD on adapter `Deployments`.
 
-**If you need tighter blast radius**, plan for (not yet implemented) a
-`controller.scopedNamespaces` Helm value that will generate a Role +
-RoleBinding per listed namespace instead of a cluster-wide ClusterRole.
-Operators who cannot tolerate cluster-wide secret read should pin
-`images.controller.tag` and run with `scopedNamespaces` once landed, or apply
-a sidecar admission policy (Kyverno / OPA Gatekeeper) restricting where
-`YipYapSource` resources may be created.
+### Tightening blast radius further: `controller.scopedNamespaces`
+
+By default the controller has cluster-wide CRUD on `apps/deployments` and
+read on `""/configmaps` so it can reconcile receive-adapter Deployments in
+any namespace where a `YipYapSource` is created. To narrow this further,
+set `controller.scopedNamespaces` to the list of namespaces where
+`YipYapSource` resources are allowed to live:
+
+```yaml
+controller:
+  scopedNamespaces:
+    - team-a
+    - team-b
+```
+
+This currently emits per-namespace `Role` + `RoleBinding` pairs in addition
+to the cluster-wide ClusterRole; pair with a Kyverno/OPA admission policy
+that rejects `YipYapSource` creation outside the listed namespaces, and
+remove the cluster-wide deployment/configmap rules in your overlay if you
+require strict per-namespace scoping.
 
 Tracked as security-review finding H-6.
+
+### Webhook cert rotation
+
+The webhook self-signs a TLS CA at first startup via
+`knative.dev/pkg/webhook/certificates`. The CA bundle is patched into the
+admission webhook configurations on each pod startup; the in-Secret cert
+itself rotates via the same controller loop on a 30-day cadence by default.
+
+For operators who want managed rotation:
+
+- **cert-manager** — annotate the `yipyap-source-webhook-certs` Secret and
+  point a `cert-manager.io/Issuer` at it; disable the in-process rotation
+  by overriding `webhook.failurePolicy` and supplying your own bundle.
+- **Manual rollout** — `kubectl rollout restart deployment/yipyap-source-webhook
+  -n yipyap-sources` will trigger a fresh in-process rotation; webhook HA
+  (`replicas: 2` + PDB `minAvailable: 1`) keeps admission responsive
+  during the rollover.
 
 ## Upgrade notes
 
 - The webhook self-signs a CA at startup — there is no cert-manager dependency
-  and no chart-side TLS material to rotate.
+  and no chart-side TLS material to rotate by default. See "Webhook cert
+  rotation" above for managed-rotation options.
 - CRD updates are applied in-place when `installCRD=true`. If you need
   CRD conversion between minor versions, gate the CRD with `installCRD=false`
   and manage it separately.

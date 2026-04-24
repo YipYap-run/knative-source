@@ -61,10 +61,14 @@ rules:
   - update
   - patch
 
+# ConfigMaps are needed cluster-wide for Knative-style observability config
+# discovery. Secrets are NOT included here: the controller never reads
+# Secret values in-process. The receive-adapter Pod kubelet-dereferences
+# the API key Secret in its own namespace via SecretKeyRef. Cluster-wide
+# secret read on the controller SA is therefore unused (security-review H-6).
 - apiGroups:
   - ""
   resources:
-  - secrets
   - configmaps
   verbs:
   - get

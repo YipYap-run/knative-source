@@ -1,0 +1,59 @@
+{{- /*
+Per-namespace Role + RoleBinding pairs for tightened blast radius.
+
+When `controller.scopedNamespaces` is non-empty, this template emits a Role +
+RoleBinding for each listed namespace that grants the controller SA the
+namespace-scoped permissions it needs to reconcile receive-adapter
+Deployments and read referenced ConfigMaps without requiring those verbs
+cluster-wide.
+
+The cluster-wide ClusterRole (clusterrole.yaml) still grants the
+non-namespaced verbs the controller needs (events, yipyapsources,
+clusterroles/list, leases). Secrets are intentionally not granted at any
+level — the controller never reads Secret values in-process; the
+receive-adapter Pod resolves SecretKeyRef in its own namespace via kubelet.
+
+Empty `controller.scopedNamespaces` (default) keeps the cluster-wide
+posture for Deployments + ConfigMaps; setting any namespace narrows the
+posture by carving out per-namespace Role grants instead.
+
+Tracked as security-review finding H-6.
+*/}}
+{{- with .Values.controller.scopedNamespaces }}
+{{- $sa := include "yipyap-source.controllerServiceAccountName" $ -}}
+{{- $saNamespace := include "yipyap-source.namespace" $ -}}
+{{- $labels := include "yipyap-source.labels" $ -}}
+{{- range $ns := . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $sa }}-scoped
+  namespace: {{ $ns }}
+  labels:
+    {{- $labels | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $sa }}-scoped
+  namespace: {{ $ns }}
+  labels:
+    {{- $labels | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $sa }}-scoped
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ $saNamespace }}
+{{- end }}
+{{- end }}
