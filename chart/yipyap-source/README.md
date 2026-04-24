@@ -68,6 +68,31 @@ See [`values.yaml`](./values.yaml) for the authoritative list. Highlights:
 | `metrics.enabled`           | `true`                                             | Expose Prometheus metrics on `:9090`.                        |
 | `installCRD`                | `true`                                             | Whether Helm installs the `YipYapSource` CRD.                |
 
+## Security model
+
+### Controller cluster-wide Secret access (by design)
+
+The controller ClusterRole grants `get`/`list`/`watch` on `secrets` across the
+whole cluster. This is the canonical Knative source pattern: a `YipYapSource`
+can live in any namespace, and its `spec.apiKeyRef.name` points to a Secret in
+that same namespace which the controller must read at reconcile time to stamp
+the receive-adapter Deployment with the API key as an env var.
+
+Kubernetes RBAC cannot scope-by-resource-name on `secrets` in a ClusterRole
+when the names are not known up front, so the permission model is binary:
+either the controller watches all namespaces (current default, convenient) or
+operators pre-declare a scoped namespace list.
+
+**If you need tighter blast radius**, plan for (not yet implemented) a
+`controller.scopedNamespaces` Helm value that will generate a Role +
+RoleBinding per listed namespace instead of a cluster-wide ClusterRole.
+Operators who cannot tolerate cluster-wide secret read should pin
+`images.controller.tag` and run with `scopedNamespaces` once landed, or apply
+a sidecar admission policy (Kyverno / OPA Gatekeeper) restricting where
+`YipYapSource` resources may be created.
+
+Tracked as security-review finding H-6.
+
 ## Upgrade notes
 
 - The webhook self-signs a CA at startup — there is no cert-manager dependency

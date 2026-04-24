@@ -26,6 +26,14 @@ images:
 # Controller Deployment.
 controller:
   replicas: 1
+  # scopedNamespaces (planned, see chart README) will restrict the controller's
+  # Secret read permission to the listed namespaces via a Role+RoleBinding pair
+  # per namespace instead of a cluster-wide ClusterRole. Default empty means
+  # cluster-wide access — the canonical Knative source pattern. Operators who
+  # cannot tolerate cluster-wide secret read should either pre-declare
+  # namespaces here (once supported) or wrap YipYapSource creation with an
+  # admission policy (Kyverno, OPA Gatekeeper).
+  scopedNamespaces: []
   resources:
     requests:
       cpu: 100m
