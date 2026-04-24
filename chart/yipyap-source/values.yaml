@@ -108,3 +108,9 @@ priorityClassName: ""
 
 # CRD install toggle. Set false if you manage CRDs separately (e.g. via Argo/Flux).
 installCRD: true
+
+# NetworkPolicy for controller + webhook pods. Set to false in clusters
+# without a NetworkPolicy-aware CNI (some bare kubeadm installs) or when you
+# manage NetworkPolicies out-of-band.
+networkPolicy:
+  enabled: true

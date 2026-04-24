@@ -1,0 +1,102 @@
+{{- if .Values.networkPolicy.enabled }}
+# NetworkPolicy for the controller pod.
+#
+# Ingress: controller is never called by external clients (no Service exposed
+# outside metrics). Metrics scraping from the observability stack is allowed
+# via the metrics port.
+#
+# Egress: kube-apiserver (for informers + reconcile writes) and DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: yipyap-source-controller
+  namespace: {{ include "yipyap-source.namespace" . }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: yipyap-source-controller
+      control-plane: yipyap-source-controller-manager
+  policyTypes: [Ingress, Egress]
+  ingress:
+    {{- if .Values.metrics.enabled }}
+    # Allow Prometheus / metrics scrapers from any namespace to reach :9090.
+    - from: []
+      ports:
+        - protocol: TCP
+          port: {{ .Values.metrics.port }}
+    {{- end }}
+  egress:
+    # DNS.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # kube-apiserver (typically on 443 or 6443).
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+---
+# NetworkPolicy for the webhook pod.
+#
+# Ingress: kube-apiserver calls the webhook admission endpoint on :8443.
+# Metrics scraping is allowed on the metrics port.
+#
+# Egress: kube-apiserver + DNS (the webhook patches its own CA bundle into
+# the admission configurations on startup).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: yipyap-source-webhook
+  namespace: {{ include "yipyap-source.namespace" . }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: yipyap-source-webhook
+      role: yipyap-source-webhook
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # kube-apiserver callback — allow from anywhere since the apiserver IP is
+    # not a static NetworkPolicy peer selector in every cluster.
+    - from: []
+      ports:
+        - protocol: TCP
+          port: {{ .Values.webhook.port }}
+    {{- if .Values.metrics.enabled }}
+    - from: []
+      ports:
+        - protocol: TCP
+          port: {{ .Values.metrics.port }}
+    {{- end }}
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+{{- end }}
