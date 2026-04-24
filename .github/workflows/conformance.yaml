@@ -1,0 +1,93 @@
+# Knative-source conformance workflow.
+#
+# Runs the YipYapSource conformance suite against a fresh kind cluster.
+# Gated two ways:
+#   1. A pull request labeled `conformance` fires this workflow via the
+#      `labeled` event. Remove-then-reapply to re-run.
+#   2. Manual trigger from the Actions tab (workflow_dispatch).
+#
+# The job is `continue-on-error: true` while the harness matures so a flaky
+# cluster startup doesn't block PRs. Remove the flag once the suite is
+# reliably green across multiple runs.
+#
+# Security note: this workflow does not consume any user-controlled event
+# payload in `run:` steps (issue/PR titles, commit messages, etc.). The only
+# event-derived value referenced is `github.event.label.name`, used in an
+# `if:` expression — not a shell interpolation.
+
+name: Conformance
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    # Narrow the label-triggered firing to the specific label we care about.
+    # workflow_dispatch always runs.
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'conformance'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Create kind cluster
+        uses: engineerd/setup-kind@v0.5.0
+        with:
+          version: v0.24.0
+          config: test/conformance/kind-config.yaml
+          name: yipyap-conformance
+
+      - name: Install Knative Eventing
+        # Pin to the same minor version as our knative.dev/eventing Go
+        # dependency (v0.48 at the time of writing). Bumping Go deps MUST be
+        # paired with a bump here.
+        env:
+          KNATIVE_EVENTING_VERSION: v1.21.0
+        run: |
+          set -eu
+          kubectl apply -f "https://github.com/knative/eventing/releases/download/knative-${KNATIVE_EVENTING_VERSION}/eventing-crds.yaml"
+          kubectl apply -f "https://github.com/knative/eventing/releases/download/knative-${KNATIVE_EVENTING_VERSION}/eventing-core.yaml"
+          kubectl wait --for=condition=Ready pods --all -n knative-eventing --timeout=300s
+
+      - name: Install yipyap-source chart
+        # The chart's default image tags resolve to published ghcr.io images.
+        # Building controller/webhook/adapter images inside CI is tracked as
+        # a follow-up; for now conformance runs against whatever the default
+        # chart pulls (typically :latest).
+        run: |
+          set -eu
+          helm version
+          helm install yipyap-source ./chart/yipyap-source \
+            -n yipyap-sources --create-namespace
+          kubectl wait --for=condition=Available deployment \
+            -n yipyap-sources --all --timeout=300s
+
+      - name: Run conformance suite
+        env:
+          KUBECONFIG: ${{ github.workspace }}/.kubeconfig
+        run: |
+          set -eu
+          kind get kubeconfig --name yipyap-conformance > "$KUBECONFIG"
+          go test -tags conformance -v -timeout 20m ./test/conformance/...
+
+      - name: Dump controller logs on failure
+        # Runs even on failure so CI logs capture why the controller didn't
+        # mark Ready. `|| true` on each command because the resources may be
+        # absent if setup failed early.
+        if: failure()
+        run: |
+          kubectl -n yipyap-sources get all -o wide || true
+          kubectl -n yipyap-sources logs -l app.kubernetes.io/component=controller --tail=500 || true
+          kubectl -n yipyap-sources logs -l app.kubernetes.io/component=webhook --tail=500 || true
+          kubectl get yipyapsources -A -o yaml || true
