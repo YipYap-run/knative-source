@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Knative Authors
+Copyright 2026 The YipYap Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,21 +22,39 @@ import (
 	"knative.dev/pkg/apis"
 )
 
-// SetDefaults mutates YipYapSource.
-func (s *YipYapSource) SetDefaults(ctx context.Context) {
-	//Add code for Mutating admission webhook.
+// Default values applied by SetDefaults when the corresponding fields are unset.
+const (
+	// DefaultAPIKeySecretKey is the default Secret key that carries the API token.
+	DefaultAPIKeySecretKey = "api-key"
 
-	//example: If ServiceAccountName is unspecified, default to the "default" service account.
-	if s != nil && s.Spec.ServiceAccountName == "" {
-		s.Spec.ServiceAccountName = "default"
+	// DefaultBaseURL is the hosted YipYap console endpoint. Override for
+	// self-hosted FOSS deployments.
+	DefaultBaseURL = "https://console.yipyap.run"
+)
+
+// SetDefaults applies API defaults to the YipYapSource.
+func (y *YipYapSource) SetDefaults(ctx context.Context) {
+	if y == nil {
+		return
+	}
+	// Scope sink reference resolution to the YipYapSource's own namespace
+	// so that a missing Destination.Ref.Namespace is filled in as expected.
+	withNS := apis.WithinParent(ctx, y.ObjectMeta)
+	y.Spec.SetDefaults(withNS)
+}
+
+// SetDefaults applies API defaults to the YipYapSourceSpec.
+func (s *YipYapSourceSpec) SetDefaults(ctx context.Context) {
+	if s.APIKeyRef.Key == "" {
+		s.APIKeyRef.Key = DefaultAPIKeySecretKey
+	}
+	if s.BaseURL == "" {
+		s.BaseURL = DefaultBaseURL
+	}
+	if s.Mode == "" {
+		s.Mode = YipYapSourceModeAuto
 	}
 
-	//example: If Interval is unspecified, default to "10s".
-	if s != nil && s.Spec.Interval == "" {
-		s.Spec.Interval = "10s"
-	}
-
-	// call SetDefaults against duckv1.Destination with a context of ObjectMeta of YipYapSource.
-	withNS := apis.WithinParent(ctx, s.ObjectMeta)
-	s.Spec.Sink.SetDefaults(withNS)
+	// Let the embedded Destination default its namespace from the parent.
+	s.Sink.SetDefaults(ctx)
 }
