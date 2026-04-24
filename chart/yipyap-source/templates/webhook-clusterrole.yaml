@@ -41,10 +41,17 @@ rules:
     resources: ["secrets"]
     verbs: ["get", "create", "update", "list", "watch"]
 
-  # Webhook registration.
+  # Webhook registration — scoped to this source's own webhookconfigurations
+  # (security-review H-8). The Knative cert controller needs get+update+patch
+  # to inject the CA bundle into its own admission configs; it never needs
+  # list/create/delete or access to any other webhook configs in the cluster.
   - apiGroups: ["admissionregistration.k8s.io"]
     resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
-    verbs: *everything
+    resourceNames:
+      - "defaulting.webhook.sources.yipyap.run"
+      - "validation.webhook.sources.yipyap.run"
+      - "config.webhook.sources.yipyap.run"
+    verbs: ["get", "update", "patch"]
 
   # Leader election.
   - apiGroups: ["coordination.k8s.io"]
