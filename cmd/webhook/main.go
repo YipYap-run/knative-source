@@ -1,5 +1,6 @@
 /*
-Copyright 2020 The Knative Authors
+Copyright 2026 Cyra.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -17,7 +18,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	o11yconfigmap "knative.dev/eventing/pkg/observability/configmap"
@@ -26,7 +26,6 @@ import (
 	"knative.dev/pkg/injection/sharedmain"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/signals"
-	"knative.dev/pkg/system"
 	"knative.dev/pkg/webhook"
 	"knative.dev/pkg/webhook/certificates"
 	"knative.dev/pkg/webhook/configmaps"
@@ -37,21 +36,33 @@ import (
 	"github.com/YipYap-run/knative-source/pkg/apis/sources/v1alpha1"
 )
 
+// types is the set of resources the webhook will default and validate.
 var types = map[schema.GroupVersionKind]resourcesemantics.GenericCRD{
-	// List the types to validate
 	v1alpha1.SchemeGroupVersion.WithKind("YipYapSource"): &v1alpha1.YipYapSource{},
 }
 
+// callbacks is the map of extra validating callbacks; currently empty —
+// Validate() on the type itself does the work.
 var callbacks = map[schema.GroupVersionKind]validation.Callback{}
 
-const admissionWebhookName = "yipyap-source-webhook"
+const (
+	admissionWebhookName = "yipyap-source-webhook"
 
-// NewDefaultingAdmissionController sets up mutating webhook.
+	// Webhook admission-controller names. These are the canonical
+	// `*.sources.yipyap.run` identifiers that MutatingWebhookConfiguration
+	// and ValidatingWebhookConfiguration resources must match.
+	defaultingWebhookName      = "defaulting.webhook.sources.yipyap.run"
+	validationWebhookName      = "validation.webhook.sources.yipyap.run"
+	configValidationWebhookName = "config.webhook.sources.yipyap.run"
+)
+
+// NewDefaultingAdmissionController sets up the mutating admission webhook
+// that runs SetDefaults() on every YipYapSource create/update.
 func NewDefaultingAdmissionController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
 	return defaulting.NewAdmissionController(ctx,
 
 		// Name of the resource webhook.
-		fmt.Sprintf("defaulting.webhook.%s.knative.dev", system.Namespace()),
+		defaultingWebhookName,
 
 		// The path on which to serve the webhook.
 		"/defaulting",
@@ -59,10 +70,9 @@ func NewDefaultingAdmissionController(ctx context.Context, cmw configmap.Watcher
 		// The resource to default.
 		types,
 
-		// A function that infuses the context passed to Validate/SetDefaults with custom metadata.
+		// A function that infuses the context passed to Validate/SetDefaults
+		// with custom metadata.
 		func(ctx context.Context) context.Context {
-			// Here is where you would infuse the context with state
-			// (e.g. attach a store with configmap data)
 			return ctx
 		},
 
@@ -71,12 +81,13 @@ func NewDefaultingAdmissionController(ctx context.Context, cmw configmap.Watcher
 	)
 }
 
-// NewValidationAdmissionController sets up validation webhook.
+// NewValidationAdmissionController sets up the validating admission webhook
+// that runs Validate() on every YipYapSource create/update.
 func NewValidationAdmissionController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
 	return validation.NewAdmissionController(ctx,
 
 		// Name of the resource webhook.
-		fmt.Sprintf("validation.webhook.%s.knative.dev", system.Namespace()),
+		validationWebhookName,
 
 		// The path on which to serve the webhook.
 		"/resource-validation",
@@ -84,10 +95,9 @@ func NewValidationAdmissionController(ctx context.Context, cmw configmap.Watcher
 		// The resources to validate.
 		types,
 
-		// A function that infuses the context passed to Validate/SetDefaults with custom metadata.
+		// A function that infuses the context passed to Validate/SetDefaults
+		// with custom metadata.
 		func(ctx context.Context) context.Context {
-			// Here is where you would infuse the context with state
-			// (e.g. attach a store with configmap data)
 			return ctx
 		},
 
@@ -99,12 +109,15 @@ func NewValidationAdmissionController(ctx context.Context, cmw configmap.Watcher
 	)
 }
 
-// NewConfigValidationController sets up ConfigMap validation webhook.
+// NewConfigValidationController sets up a ConfigMap validation webhook so
+// pinned configmap schemas (logging, observability) are rejected early.
+// This is a stub wiring that validates the shared knative configmaps we
+// already consume; add more Constructors here as we grow our own.
 func NewConfigValidationController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
 	return configmaps.NewAdmissionController(ctx,
 
 		// Name of the configmap webhook.
-		fmt.Sprintf("config.webhook.%s.knative.dev", system.Namespace()),
+		configValidationWebhookName,
 
 		// The path on which to serve the webhook.
 		"/config-validation",
@@ -118,11 +131,11 @@ func NewConfigValidationController(ctx context.Context, cmw configmap.Watcher) *
 }
 
 func main() {
-	// Set up a signal context with our webhook options
+	// Set up a signal context with our webhook options.
 	ctx := webhook.WithOptions(signals.NewContext(), webhook.Options{
 		ServiceName: admissionWebhookName,
 		Port:        8443,
-		SecretName:  "webhook-certs",
+		SecretName:  "yipyap-source-webhook-certs",
 	})
 
 	sharedmain.WebhookMainWithContext(ctx, admissionWebhookName,
