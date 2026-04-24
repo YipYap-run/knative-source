@@ -20,6 +20,14 @@ spec:
         control-plane: yipyap-source-controller-manager
     spec:
       serviceAccountName: {{ include "yipyap-source.controllerServiceAccountName" . }}
+      # Pod-level security baseline (security-review A5-NEW-2): the pod runs
+      # as nonroot, drops all capabilities at the container level, and
+      # applies the host's RuntimeDefault seccomp profile so the workload
+      # passes Kubernetes Pod Security Standard "restricted".
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . | quote }}
       {{- end }}
@@ -74,6 +82,8 @@ spec:
             runAsNonRoot: true
             capabilities:
               drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             {{- if .Values.metrics.enabled }}
             - name: metrics

@@ -50,36 +50,34 @@ rules:
       - update
       - patch
 
-  # Deployments admin
-  - apiGroups:
-      - apps
-    resources:
-      - deployments
-    verbs: *everything
+  # Webhook does NOT reconcile Deployments — that's the controller's job
+  # (security-review H-7 — Deployment CRUD removed from webhook SA).
 
-  # Secrets read
+  # Service read for webhook target service discovery.
   - apiGroups:
       - ""
     resources:
-      - secrets
       - services
     verbs:
       - get
       - list
       - watch
 
-  # Namespace labelling for webhook
+  # Webhook reads ONLY its own (system) namespace at startup to attach
+  # OwnerReferences to its admission ConfigMaps + ValidatingWebhookConfigs.
+  # The upstream knative.dev/pkg webhook never calls Patch/Update on
+  # Namespaces (security-review A6-N-2). Scope by resourceNames to the
+  # release namespace.
   - apiGroups:
       - ""
     resources:
       - namespaces
+    resourceNames:
+      - "yipyap-sources"
     verbs:
       - get
-      - list
-      - watch
-      - patch
 
-  # Events admin
+  # Events admin + ConfigMaps for observability discovery.
   - apiGroups:
       - ""
     resources:
@@ -94,7 +92,7 @@ rules:
       - eventtypes
     verbs: *everything
 
-  # For manipulating certs into secrets.
+  # Webhook manages its own cert secret only.
   - apiGroups:
       - ""
     resources:
@@ -106,13 +104,22 @@ rules:
       - "list"
       - "watch"
 
-  # For actually registering our webhook.
+  # Webhook registration scoped to this source's own webhookconfigurations
+  # only (security-review H-8). Cert controller needs get/update/patch to
+  # inject the CA bundle; never list/create/delete or other configs.
   - apiGroups:
       - "admissionregistration.k8s.io"
     resources:
       - "mutatingwebhookconfigurations"
       - "validatingwebhookconfigurations"
-    verbs: *everything
+    resourceNames:
+      - "defaulting.webhook.sources.yipyap.run"
+      - "validation.webhook.sources.yipyap.run"
+      - "config.webhook.sources.yipyap.run"
+    verbs:
+      - "get"
+      - "update"
+      - "patch"
 
   # For Leader Election
   - apiGroups:

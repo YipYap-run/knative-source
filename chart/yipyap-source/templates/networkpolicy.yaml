@@ -21,8 +21,18 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     {{- if .Values.metrics.enabled }}
-    # Allow Prometheus / metrics scrapers from any namespace to reach :9090.
-    - from: []
+    # Metrics scrapers (security-review A6-N-1).
+    # Default: open to any namespace (back-compat). Operators with a known
+    # monitoring namespace set metrics.networkPolicy.ingressFromNamespaceLabels
+    # to restrict the ingress to a labeled namespace selector.
+    - from:
+        {{- with .Values.metrics.networkPolicy.ingressFromNamespaceLabels }}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+        {{- else }}
+        []
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.metrics.port }}
@@ -76,7 +86,15 @@ spec:
         - protocol: TCP
           port: {{ .Values.webhook.port }}
     {{- if .Values.metrics.enabled }}
-    - from: []
+    # Metrics scrapers (security-review A6-N-1).
+    - from:
+        {{- with .Values.metrics.networkPolicy.ingressFromNamespaceLabels }}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+        {{- else }}
+        []
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.metrics.port }}

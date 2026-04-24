@@ -41,6 +41,14 @@ spec:
             weight: 100
 
       serviceAccountName: yipyap-source-webhook
+
+      # Pod-level baseline (security-review A5-NEW-2): nonroot + RuntimeDefault
+      # seccomp = passes Kubernetes Pod Security Standard "restricted".
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
         - name: webhook
           terminationMessagePolicy: FallbackToLogsOnError
@@ -66,6 +74,14 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.name
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
           ports:
           - containerPort: 9090
             name: metrics
