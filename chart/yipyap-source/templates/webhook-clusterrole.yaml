@@ -24,9 +24,17 @@ rules:
     resources: ["services"]
     verbs: ["get", "list", "watch"]
 
+  # Webhook reads ONLY its own (system) namespace at startup to attach
+  # OwnerReferences to its admission ConfigMaps + ValidatingWebhookConfigs.
+  # The upstream knative.dev/pkg webhook never calls Patch/Update on
+  # Namespaces; the round-1 grant of patch+list+watch was over-permissive.
+  # Scope by resourceNames to the chart's release namespace
+  # (security-review A6-N-2).
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["get", "list", "watch", "patch"]
+    resourceNames:
+      - {{ include "yipyap-source.namespace" . | quote }}
+    verbs: ["get"]
 
   - apiGroups: [""]
     resources: ["events", "configmaps"]

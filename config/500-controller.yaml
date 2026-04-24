@@ -43,6 +43,13 @@ spec:
 
       serviceAccountName: yipyap-source-controller
 
+      # Pod-level baseline (security-review A5-NEW-2): nonroot + RuntimeDefault
+      # seccomp = passes Kubernetes Pod Security Standard "restricted".
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: controller
         terminationMessagePolicy: FallbackToLogsOnError
@@ -73,6 +80,12 @@ spec:
 
         securityContext:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
 
         ports:
           - name: metrics
