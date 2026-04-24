@@ -31,8 +31,8 @@ readonly COMPONENTS
 function build_release() {
    # Update release labels if this is a tagged release
   if [[ -n "${TAG}" ]]; then
-    echo "Tagged release, updating release labels to samples.knative.dev/release: \"${TAG}\""
-    LABEL_YAML_CMD=(sed -e "s|samples.knative.dev/release: devel|samples.knative.dev/release: \"${TAG}\"|")
+    echo "Tagged release, updating release labels to sources.yipyap.run/release: \"${TAG}\""
+    LABEL_YAML_CMD=(sed -e "s|sources.yipyap.run/release: devel|sources.yipyap.run/release: \"${TAG}\"|")
   else
     echo "Untagged release, will NOT update release labels"
     LABEL_YAML_CMD=(cat)

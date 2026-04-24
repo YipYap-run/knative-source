@@ -15,20 +15,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sample-source-controller
-  namespace: knative-samples
+  name: yipyap-source-controller
+  namespace: yipyap-sources
   labels:
-    samples.knative.dev/release: devel
+    sources.yipyap.run/release: devel
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: sample-source-controller
+      app: yipyap-source-controller
   template:
     metadata:
       labels:
-        app: sample-source-controller
-        samples.knative.dev/release: devel
+        app: yipyap-source-controller
+        sources.yipyap.run/release: devel
     spec:
       # To avoid node becoming SPOF, spread our replicas to different nodes.
       affinity:
@@ -37,11 +37,11 @@ spec:
           - podAffinityTerm:
               labelSelector:
                 matchLabels:
-                  app: sample-source-controller
+                  app: yipyap-source-controller
               topologyKey: kubernetes.io/hostname
             weight: 100
 
-      serviceAccountName: sample-source-controller
+      serviceAccountName: yipyap-source-controller
 
       containers:
       - name: controller
@@ -64,7 +64,7 @@ spec:
             value: config-observability
           - name: METRICS_DOMAIN
             value: knative.dev/sources
-          - name: SAMPLE_SOURCE_RA_IMAGE
+          - name: YIPYAP_SOURCE_RA_IMAGE
             value: ko://github.com/YipYap-run/knative-source/cmd/receive_adapter
           - name: POD_NAME
             valueFrom:

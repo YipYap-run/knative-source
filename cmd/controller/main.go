@@ -18,12 +18,12 @@ package main
 
 import (
 	// The set of controllers this controller process runs.
-	"github.com/YipYap-run/knative-source/pkg/reconciler/sample"
+	"github.com/YipYap-run/knative-source/pkg/reconciler/yipyapsource"
 
 	// This defines the shared main for injected controllers.
 	"knative.dev/pkg/injection/sharedmain"
 )
 
 func main() {
-	sharedmain.Main("sample-source-controller", sample.NewController)
+	sharedmain.Main("yipyap-source-controller", yipyapsource.NewController)
 }

@@ -24,5 +24,5 @@ func main() {
 	ctx := signals.NewContext()
 	ctx = adapter.WithInjectorEnabled(ctx)
 
-	adapter.MainWithContext(ctx, "sample-source", myadapter.NewEnv, myadapter.NewAdapter)
+	adapter.MainWithContext(ctx, "yipyap-source", myadapter.NewEnv, myadapter.NewAdapter)
 }

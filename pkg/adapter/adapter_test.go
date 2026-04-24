@@ -56,7 +56,7 @@ func TestAdapter(t *testing.T) {
 func verify(t *testing.T, received chan cloudevents.Event) {
 	for _, id := range []int{0, 1, 2} {
 		e := <-received
-		assert.Equal(t, "dev.knative.sample", e.Type())
+		assert.Equal(t, "dev.yipyap.source", e.Type())
 		//m := map[string]json.RawMessage{}
 		m := &dataExample{}
 		assert.NoError(t, e.DataAs(&m))
@@ -72,7 +72,7 @@ func TestAdapterMain(t *testing.T) {
 	if os.Getenv(t.Name()) == "main" {
 		ctx := context.TODO()
 		ctx, _ = fakekubeclient.With(ctx)
-		adapter.MainWithContext(ctx, "sample-source", NewEnv, NewAdapter)
+		adapter.MainWithContext(ctx, "yipyap-source", NewEnv, NewAdapter)
 		return
 	}
 
