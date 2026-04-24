@@ -21,11 +21,11 @@ package factory
 import (
 	context "context"
 
+	externalversions "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions"
+	client "github.com/YipYap-run/knative-source/pkg/client/injection/client"
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 	logging "knative.dev/pkg/logging"
-	externalversions "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions"
-	client "github.com/YipYap-run/knative-source/pkg/client/injection/client"
 )
 
 func init() {

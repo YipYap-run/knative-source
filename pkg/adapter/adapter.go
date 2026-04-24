@@ -52,8 +52,8 @@ type dataExample struct {
 
 func (a *Adapter) newEvent() cloudevents.Event {
 	event := cloudevents.NewEvent()
-	event.SetType("dev.knative.sample")
-	event.SetSource("sample.knative.dev/heartbeat-source")
+	event.SetType("dev.yipyap.source")
+	event.SetSource("sources.yipyap.run/heartbeat-source")
 
 	if err := event.SetData(cloudevents.ApplicationJSON, &dataExample{
 		Sequence:  a.nextID,

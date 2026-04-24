@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright 2019 The Knative Authors
+# Copyright 2026 The YipYap Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,33 +18,56 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-source $(dirname $0)/../vendor/knative.dev/hack/codegen-library.sh
+source "$(dirname "$0")/../vendor/knative.dev/hack/codegen-library.sh"
 
-# If we run with -mod=vendor here, then generate-groups.sh looks for vendor files in the wrong place.
+# If we run with -mod=vendor here, codegen tools write into the vendor tree.
 export GOFLAGS=-mod=
 
 echo "=== Update Codegen for ${MODULE_NAME}"
 
-group "Kubernetes Codegen"
+# shellcheck disable=SC1091
+source "${CODEGEN_PKG}/kube_codegen.sh"
 
-# generate the code with:
-# --output-base    because this script should also be able to run inside the vendor dir of
-#                  k8s.io/kubernetes. The output-base is needed for the generators to output into the vendor dir
-#                  instead of the $GOPATH directly. For normal projects this can be dropped.
-${CODEGEN_PKG}/generate-groups.sh "deepcopy,client,informer,lister" \
-  github.com/YipYap-run/knative-source/pkg/client github.com/YipYap-run/knative-source/pkg/apis \
-  "samples:v1alpha1" \
-  --go-header-file ${REPO_ROOT_DIR}/hack/boilerplate/boilerplate.go.txt
+BOILERPLATE="${REPO_ROOT_DIR}/hack/boilerplate/boilerplate.go.txt"
 
-group "Knative Codegen"
+group "Kubernetes Codegen (deepcopy)"
 
-# Knative Injection
-${KNATIVE_CODEGEN_PKG}/hack/generate-knative.sh "injection" \
-  github.com/YipYap-run/knative-source/pkg/client github.com/YipYap-run/knative-source/pkg/apis \
-  "samples:v1alpha1" \
-  --go-header-file ${REPO_ROOT_DIR}/hack/boilerplate/boilerplate.go.txt
+# The vendored k8s.io/code-generator in this repo (pinned to the same version
+# as the rest of the k8s.io/* dependencies) predates validation-gen. The
+# kube_codegen.sh gen_helpers function tries to install validation-gen
+# unconditionally, so we invoke deepcopy-gen directly instead.
+GO111MODULE=on go install k8s.io/code-generator/cmd/deepcopy-gen
+
+# Enumerate API package directories (those containing v<x>alpha|beta-style leaves).
+API_PACKAGES=()
+while IFS= read -r d; do
+  API_PACKAGES+=("$(cd "${d}" && GO111MODULE=on go list -find .)")
+done < <(find "${REPO_ROOT_DIR}/pkg/apis" -mindepth 2 -maxdepth 2 -type d -regex '.*/v[0-9]+\(alpha[0-9]+\|beta[0-9]+\)?')
+
+GOBIN="${GOBIN:-$(go env GOPATH)/bin}"
+"${GOBIN}/deepcopy-gen" \
+  --output-file zz_generated.deepcopy.go \
+  --go-header-file "${BOILERPLATE}" \
+  "${API_PACKAGES[@]}"
+
+group "Kubernetes Codegen (clientset + lister + informer)"
+
+kube::codegen::gen_client \
+  --with-watch \
+  --output-dir "${REPO_ROOT_DIR}/pkg/client" \
+  --output-pkg "${MODULE_NAME}/pkg/client" \
+  --boilerplate "${BOILERPLATE}" \
+  "${REPO_ROOT_DIR}/pkg/apis"
+
+group "Knative Codegen (injection)"
+
+# Knative injection layer
+"${KNATIVE_CODEGEN_PKG}/hack/generate-knative.sh" "injection" \
+  "${MODULE_NAME}/pkg/client" "${MODULE_NAME}/pkg/apis" \
+  "sources:v1alpha1" \
+  --go-header-file "${BOILERPLATE}"
 
 group "Update deps post-codegen"
 
 # Make sure our dependencies are up-to-date
-${REPO_ROOT_DIR}/hack/update-deps.sh
+"${REPO_ROOT_DIR}/hack/update-deps.sh"

@@ -19,29 +19,29 @@ limitations under the License.
 package versioned
 
 import (
-	"fmt"
-	"net/http"
+	fmt "fmt"
+	http "net/http"
 
+	sourcesv1alpha1 "github.com/YipYap-run/knative-source/pkg/client/clientset/versioned/typed/sources/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
-	samplesv1alpha1 "github.com/YipYap-run/knative-source/pkg/client/clientset/versioned/typed/samples/v1alpha1"
 )
 
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
-	SamplesV1alpha1() samplesv1alpha1.SamplesV1alpha1Interface
+	SourcesV1alpha1() sourcesv1alpha1.SourcesV1alpha1Interface
 }
 
 // Clientset contains the clients for groups.
 type Clientset struct {
 	*discovery.DiscoveryClient
-	samplesV1alpha1 *samplesv1alpha1.SamplesV1alpha1Client
+	sourcesV1alpha1 *sourcesv1alpha1.SourcesV1alpha1Client
 }
 
-// SamplesV1alpha1 retrieves the SamplesV1alpha1Client
-func (c *Clientset) SamplesV1alpha1() samplesv1alpha1.SamplesV1alpha1Interface {
-	return c.samplesV1alpha1
+// SourcesV1alpha1 retrieves the SourcesV1alpha1Client
+func (c *Clientset) SourcesV1alpha1() sourcesv1alpha1.SourcesV1alpha1Interface {
+	return c.sourcesV1alpha1
 }
 
 // Discovery retrieves the DiscoveryClient
@@ -88,7 +88,7 @@ func NewForConfigAndClient(c *rest.Config, httpClient *http.Client) (*Clientset,
 
 	var cs Clientset
 	var err error
-	cs.samplesV1alpha1, err = samplesv1alpha1.NewForConfigAndClient(&configShallowCopy, httpClient)
+	cs.sourcesV1alpha1, err = sourcesv1alpha1.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 // New creates a new Clientset for the given RESTClient.
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
-	cs.samplesV1alpha1 = samplesv1alpha1.New(c)
+	cs.sourcesV1alpha1 = sourcesv1alpha1.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)
 	return &cs

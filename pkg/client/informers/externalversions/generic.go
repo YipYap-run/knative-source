@@ -19,11 +19,11 @@ limitations under the License.
 package externalversions
 
 import (
-	"fmt"
+	fmt "fmt"
 
+	v1alpha1 "github.com/YipYap-run/knative-source/pkg/apis/sources/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
-	v1alpha1 "github.com/YipYap-run/knative-source/pkg/apis/samples/v1alpha1"
 )
 
 // GenericInformer is type of SharedIndexInformer which will locate and delegate to other
@@ -52,9 +52,9 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=samples.knative.dev, Version=v1alpha1
-	case v1alpha1.SchemeGroupVersion.WithResource("samplesources"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Samples().V1alpha1().SampleSources().Informer()}, nil
+	// Group=sources.yipyap.run, Version=v1alpha1
+	case v1alpha1.SchemeGroupVersion.WithResource("yipyapsources"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Sources().V1alpha1().YipYapSources().Informer()}, nil
 
 	}
 

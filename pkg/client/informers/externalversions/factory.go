@@ -23,13 +23,13 @@ import (
 	sync "sync"
 	time "time"
 
+	versioned "github.com/YipYap-run/knative-source/pkg/client/clientset/versioned"
+	internalinterfaces "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions/internalinterfaces"
+	sources "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions/sources"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
-	versioned "github.com/YipYap-run/knative-source/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions/internalinterfaces"
-	samples "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions/samples"
 )
 
 // SharedInformerOption defines the functional option type for SharedInformerFactory.
@@ -97,6 +97,7 @@ func NewSharedInformerFactory(client versioned.Interface, defaultResync time.Dur
 // NewFilteredSharedInformerFactory constructs a new instance of sharedInformerFactory.
 // Listers obtained via this SharedInformerFactory will be subject to the same filters
 // as specified here.
+//
 // Deprecated: Please use NewSharedInformerFactoryWithOptions instead
 func NewFilteredSharedInformerFactory(client versioned.Interface, defaultResync time.Duration, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) SharedInformerFactory {
 	return NewSharedInformerFactoryWithOptions(client, defaultResync, WithNamespace(namespace), WithTweakListOptions(tweakListOptions))
@@ -204,7 +205,7 @@ func (f *sharedInformerFactory) InformerFor(obj runtime.Object, newFunc internal
 //
 // It is typically used like this:
 //
-//	ctx, cancel := context.Background()
+//	ctx, cancel := context.WithCancel(context.Background())
 //	defer cancel()
 //	factory := NewSharedInformerFactory(client, resyncPeriod)
 //	defer factory.WaitForStop()    // Returns immediately if nothing was started.
@@ -228,6 +229,7 @@ type SharedInformerFactory interface {
 
 	// Start initializes all requested informers. They are handled in goroutines
 	// which run until the stop channel gets closed.
+	// Warning: Start does not block. When run in a go-routine, it will race with a later WaitForCacheSync.
 	Start(stopCh <-chan struct{})
 
 	// Shutdown marks a factory as shutting down. At that point no new
@@ -253,9 +255,9 @@ type SharedInformerFactory interface {
 	// client.
 	InformerFor(obj runtime.Object, newFunc internalinterfaces.NewInformerFunc) cache.SharedIndexInformer
 
-	Samples() samples.Interface
+	Sources() sources.Interface
 }
 
-func (f *sharedInformerFactory) Samples() samples.Interface {
-	return samples.New(f, f.namespace, f.tweakListOptions)
+func (f *sharedInformerFactory) Sources() sources.Interface {
+	return sources.New(f, f.namespace, f.tweakListOptions)
 }

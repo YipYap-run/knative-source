@@ -21,12 +21,12 @@ package filteredFactory
 import (
 	context "context"
 
+	externalversions "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions"
+	client "github.com/YipYap-run/knative-source/pkg/client/injection/client"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 	logging "knative.dev/pkg/logging"
-	externalversions "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions"
-	client "github.com/YipYap-run/knative-source/pkg/client/injection/client"
 )
 
 func init() {

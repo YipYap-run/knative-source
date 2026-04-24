@@ -34,17 +34,17 @@ import (
 	"knative.dev/pkg/webhook/resourcesemantics/defaulting"
 	"knative.dev/pkg/webhook/resourcesemantics/validation"
 
-	"github.com/YipYap-run/knative-source/pkg/apis/samples/v1alpha1"
+	"github.com/YipYap-run/knative-source/pkg/apis/sources/v1alpha1"
 )
 
 var types = map[schema.GroupVersionKind]resourcesemantics.GenericCRD{
 	// List the types to validate
-	v1alpha1.SchemeGroupVersion.WithKind("SampleSource"): &v1alpha1.SampleSource{},
+	v1alpha1.SchemeGroupVersion.WithKind("YipYapSource"): &v1alpha1.YipYapSource{},
 }
 
 var callbacks = map[schema.GroupVersionKind]validation.Callback{}
 
-const admissionWebhookName = "sample-source-webhook"
+const admissionWebhookName = "yipyap-source-webhook"
 
 // NewDefaultingAdmissionController sets up mutating webhook.
 func NewDefaultingAdmissionController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
