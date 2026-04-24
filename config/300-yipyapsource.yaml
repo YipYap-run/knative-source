@@ -63,4 +63,7 @@ spec:
     - sources
     kind: YipYapSource
     plural: yipyapsources
+    singular: yipyapsource
+    shortNames:
+    - yys
   scope: Namespaced
