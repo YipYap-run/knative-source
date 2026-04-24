@@ -1,0 +1,27 @@
+apiVersion: v2
+name: yipyap-source
+description: YipYapSource CRD + controller for the Knative Eventing source.
+type: application
+version: 0.1.0
+appVersion: 0.1.0
+home: https://yipyap.run
+sources:
+  - https://github.com/YipYap-run/knative-source
+icon: https://yipyap.run/icon.png
+keywords:
+  - yipyap
+  - knative
+  - cloudevents
+  - eventing
+  - source
+  - observability
+maintainers:
+  - name: YipYap
+    url: https://yipyap.run
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/changes: |
+    - Initial release (Phase 4).
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://docs.yipyap.run/integrations/knative/source-crd/

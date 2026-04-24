@@ -1,0 +1,102 @@
+# Default values for yipyap-source.
+# This is a YAML-formatted file. Values may be overridden via --set or a custom values file.
+
+# Namespace where the controller + webhook run.
+namespace:
+  create: true
+  name: yipyap-sources
+
+# Container images.
+images:
+  controller:
+    repository: ghcr.io/yipyap-run/knative-source-controller
+    # If empty, falls back to .Chart.AppVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  webhook:
+    repository: ghcr.io/yipyap-run/knative-source-webhook
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Adapter (receive-adapter) image deployed per-YipYapSource by the controller.
+  # Set via the YIPYAP_SOURCE_RA_IMAGE env var on the controller Deployment.
+  adapter:
+    repository: ghcr.io/yipyap-run/knative-source
+    tag: ""
+
+# Controller Deployment.
+controller:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Webhook Deployment (validating + mutating admission).
+webhook:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  # failurePolicy: Fail = reject CRD writes if webhook is unavailable.
+  # Set to Ignore if you want best-effort admission (not recommended).
+  failurePolicy: Fail
+  # Port the webhook listens on (canonical 8443).
+  port: 8443
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Metrics exposed for Prometheus scraping (controller + webhook).
+metrics:
+  enabled: true
+  port: 9090
+
+# ServiceAccount names (for custom SA bindings).
+serviceAccounts:
+  controller:
+    name: yipyap-source-controller
+    create: true
+  webhook:
+    name: yipyap-source-webhook
+    create: true
+
+# Logging config (maps to the config-logging ConfigMap).
+logging:
+  level: info
+  zap-logger-config: |
+    {
+      "level": "info",
+      "development": false,
+      "outputPaths": ["stdout"],
+      "errorOutputPaths": ["stderr"],
+      "encoding": "json",
+      "encoderConfig": {
+        "timeKey": "ts",
+        "levelKey": "level",
+        "nameKey": "logger",
+        "callerKey": "caller",
+        "messageKey": "msg",
+        "stacktraceKey": "stacktrace",
+        "lineEnding": "",
+        "levelEncoder": "",
+        "timeEncoder": "iso8601",
+        "durationEncoder": "",
+        "callerEncoder": ""
+      }
+    }
+
+# Priority class for the controller + webhook pods.
+priorityClassName: ""
+
+# CRD install toggle. Set false if you manage CRDs separately (e.g. via Argo/Flux).
+installCRD: true

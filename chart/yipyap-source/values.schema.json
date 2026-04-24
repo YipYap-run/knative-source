@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "yipyap-source values",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["namespace", "images", "controller", "webhook", "serviceAccounts"],
+  "properties": {
+    "namespace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "name"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "name":   { "type": "string", "minLength": 1 }
+      }
+    },
+    "images": {
+      "type": "object",
+      "required": ["controller", "webhook", "adapter"],
+      "properties": {
+        "controller": { "$ref": "#/definitions/image" },
+        "webhook":    { "$ref": "#/definitions/image" },
+        "adapter":    { "$ref": "#/definitions/image" }
+      }
+    },
+    "controller": {
+      "type": "object",
+      "required": ["replicas"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 0 },
+        "resources": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" }
+      }
+    },
+    "webhook": {
+      "type": "object",
+      "required": ["replicas", "failurePolicy", "port"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 0 },
+        "failurePolicy": { "type": "string", "enum": ["Fail", "Ignore"] },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "resources": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "serviceAccounts": {
+      "type": "object",
+      "required": ["controller", "webhook"],
+      "properties": {
+        "controller": { "$ref": "#/definitions/sa" },
+        "webhook":    { "$ref": "#/definitions/sa" }
+      }
+    },
+    "logging": { "type": "object" },
+    "priorityClassName": { "type": "string" },
+    "installCRD": { "type": "boolean" }
+  },
+  "definitions": {
+    "image": {
+      "type": "object",
+      "required": ["repository"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never", ""] }
+      }
+    },
+    "sa": {
+      "type": "object",
+      "required": ["name", "create"],
+      "properties": {
+        "name":   { "type": "string", "minLength": 1 },
+        "create": { "type": "boolean" }
+      }
+    }
+  }
+}
