@@ -1,0 +1,11 @@
+# ko configuration for the YipYap Knative Source controller + webhook.
+#
+# See https://ko.build/configuration/ for the full reference.
+
+defaultBaseImage: cgr.dev/chainguard/static:latest
+
+baseImageOverrides:
+  # The webhook binary wants a minimal base image with certificate support; the
+  # chainguard/static image already includes ca-certificates.
+  github.com/YipYap-run/knative-source/cmd/webhook: cgr.dev/chainguard/static:latest
+  github.com/YipYap-run/knative-source/cmd/controller: cgr.dev/chainguard/static:latest

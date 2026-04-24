@@ -1,9 +1,8 @@
-# The OWNERS file is used by prow to automatically merge approved PRs.
+# The OWNERS file gates code review and merge permissions for this repo.
+# Format documented at https://www.kubernetes.dev/docs/guide/owners/.
 
 approvers:
-- technical-oversight-committee
-- knative-release-leads
-- eventing-writers
+  - WaffleThief123
 
 reviewers:
-- eventing-writers
+  - WaffleThief123
