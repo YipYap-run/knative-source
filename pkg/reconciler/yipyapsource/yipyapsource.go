@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Knative Authors
+Copyright 2026 The YipYap Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,84 +14,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package yipyapsource contains the controller for YipYapSource custom resources.
+//
+// This is a stub for Task 4.1 (repo bootstrap). The real reconciler lands in
+// Task 4.3 (sink resolution) and Task 4.4 (adapter Deployment management).
 package yipyapsource
 
 import (
 	"context"
 
-	// k8s.io imports
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	// knative.dev/pkg imports
-	"knative.dev/pkg/logging"
 	pkgreconciler "knative.dev/pkg/reconciler"
-	"knative.dev/pkg/resolver"
-
-	// knative.dev/eventing imports
-	sourcesv1 "knative.dev/eventing/pkg/apis/sources/v1"
-	reconcilersource "knative.dev/eventing/pkg/reconciler/source"
 
 	"github.com/YipYap-run/knative-source/pkg/apis/sources/v1alpha1"
 	reconcileryipyapsource "github.com/YipYap-run/knative-source/pkg/client/injection/reconciler/sources/v1alpha1/yipyapsource"
-	"github.com/YipYap-run/knative-source/pkg/reconciler"
-	"github.com/YipYap-run/knative-source/pkg/reconciler/yipyapsource/resources"
 )
 
-// Reconciler reconciles a YipYapSource object
-type Reconciler struct {
-	ReceiveAdapterImage string `envconfig:"YIPYAP_SOURCE_RA_IMAGE" required:"true"`
+// Reconciler reconciles a YipYapSource object.
+//
+// Placeholder: fields and logic land in Tasks 4.3 / 4.4 / 4.5.
+type Reconciler struct{}
 
-	dr *reconciler.DeploymentReconciler
-
-	sinkResolver *resolver.URIResolver
-
-	configAccessor reconcilersource.ConfigAccessor
-}
-
-// Check that our Reconciler implements Interface
+// Check that our Reconciler implements Interface.
 var _ reconcileryipyapsource.Interface = (*Reconciler)(nil)
 
 // ReconcileKind implements Interface.ReconcileKind.
+//
+// Stub: returns nil. Task 4.3 wires sink resolution; Task 4.4 manages the
+// adapter Deployment; Task 4.5 wires status conditions.
 func (r *Reconciler) ReconcileKind(ctx context.Context, src *v1alpha1.YipYapSource) pkgreconciler.Event {
-
-	ctx = sourcesv1.WithURIResolver(ctx, r.sinkResolver)
-
-	ra, sb, event := r.dr.ReconcileDeployment(ctx, src, makeSinkBinding(src),
-		resources.MakeReceiveAdapter(&resources.ReceiveAdapterArgs{
-			EventSource:    src.Namespace + "/" + src.Name,
-			Image:          r.ReceiveAdapterImage,
-			Source:         src,
-			Labels:         resources.Labels(src.Name),
-			AdditionalEnvs: r.configAccessor.ToEnvVars(), // Grab config envs for tracing/logging/metrics
-		}),
-	)
-	if ra != nil {
-		src.Status.PropagateDeploymentAvailability(ra)
-	}
-	if sb != nil {
-		if c := sb.Status.GetCondition(sourcesv1.SinkBindingConditionSinkProvided); c.IsTrue() {
-			src.Status.MarkSink(sb.Status.SinkURI)
-		} else if c.IsFalse() {
-			src.Status.MarkNoSink(c.GetReason(), "%s", c.GetMessage())
-		}
-	}
-	if event != nil {
-		logging.FromContext(ctx).Infof("returning because event from ReconcileDeployment")
-		return event
-	}
-
 	return nil
-}
-
-func makeSinkBinding(src *v1alpha1.YipYapSource) *sourcesv1.SinkBinding {
-	return &sourcesv1.SinkBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			// this is necessary to track the change of sink reference.
-			Name:      src.GetName(),
-			Namespace: src.GetNamespace(),
-		},
-		Spec: sourcesv1.SinkBindingSpec{
-			SourceSpec: src.Spec.SourceSpec,
-		},
-	}
 }
