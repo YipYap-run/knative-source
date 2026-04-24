@@ -1,4 +1,4 @@
-module knative.dev/sample-source
+module github.com/YipYap-run/knative-source
 
 go 1.25.0
 

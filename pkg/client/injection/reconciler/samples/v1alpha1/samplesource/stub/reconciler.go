@@ -23,8 +23,8 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	reconciler "knative.dev/pkg/reconciler"
-	v1alpha1 "knative.dev/sample-source/pkg/apis/samples/v1alpha1"
-	samplesource "knative.dev/sample-source/pkg/client/injection/reconciler/samples/v1alpha1/samplesource"
+	v1alpha1 "github.com/YipYap-run/knative-source/pkg/apis/samples/v1alpha1"
+	samplesource "github.com/YipYap-run/knative-source/pkg/client/injection/reconciler/samples/v1alpha1/samplesource"
 )
 
 // TODO: PLEASE COPY AND MODIFY THIS FILE AS A STARTING POINT

@@ -38,9 +38,9 @@ import (
 	kmp "knative.dev/pkg/kmp"
 	logging "knative.dev/pkg/logging"
 	reconciler "knative.dev/pkg/reconciler"
-	v1alpha1 "knative.dev/sample-source/pkg/apis/samples/v1alpha1"
-	versioned "knative.dev/sample-source/pkg/client/clientset/versioned"
-	samplesv1alpha1 "knative.dev/sample-source/pkg/client/listers/samples/v1alpha1"
+	v1alpha1 "github.com/YipYap-run/knative-source/pkg/apis/samples/v1alpha1"
+	versioned "github.com/YipYap-run/knative-source/pkg/client/clientset/versioned"
+	samplesv1alpha1 "github.com/YipYap-run/knative-source/pkg/client/listers/samples/v1alpha1"
 )
 
 // Interface defines the strongly typed interfaces to be implemented by a

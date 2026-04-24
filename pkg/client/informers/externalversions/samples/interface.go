@@ -19,8 +19,8 @@ limitations under the License.
 package samples
 
 import (
-	internalinterfaces "knative.dev/sample-source/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "knative.dev/sample-source/pkg/client/informers/externalversions/samples/v1alpha1"
+	internalinterfaces "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions/samples/v1alpha1"
 )
 
 // Interface provides access to each of this group's versions.

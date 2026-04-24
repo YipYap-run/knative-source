@@ -21,7 +21,7 @@ import (
 
 	reconcilersource "knative.dev/eventing/pkg/reconciler/source"
 
-	"knative.dev/sample-source/pkg/apis/samples/v1alpha1"
+	"github.com/YipYap-run/knative-source/pkg/apis/samples/v1alpha1"
 
 	"github.com/kelseyhightower/envconfig"
 	"k8s.io/client-go/tools/cache"
@@ -31,12 +31,12 @@ import (
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/resolver"
 
-	"knative.dev/sample-source/pkg/reconciler"
+	"github.com/YipYap-run/knative-source/pkg/reconciler"
 
 	kubeclient "knative.dev/pkg/client/injection/kube/client"
 	deploymentinformer "knative.dev/pkg/client/injection/kube/informers/apps/v1/deployment"
-	samplesourceinformer "knative.dev/sample-source/pkg/client/injection/informers/samples/v1alpha1/samplesource"
-	"knative.dev/sample-source/pkg/client/injection/reconciler/samples/v1alpha1/samplesource"
+	samplesourceinformer "github.com/YipYap-run/knative-source/pkg/client/injection/informers/samples/v1alpha1/samplesource"
+	"github.com/YipYap-run/knative-source/pkg/client/injection/reconciler/samples/v1alpha1/samplesource"
 )
 
 // NewController initializes the controller and is called by the generated code

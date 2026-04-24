@@ -26,10 +26,10 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
-	samplesv1alpha1 "knative.dev/sample-source/pkg/apis/samples/v1alpha1"
-	versioned "knative.dev/sample-source/pkg/client/clientset/versioned"
-	internalinterfaces "knative.dev/sample-source/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "knative.dev/sample-source/pkg/client/listers/samples/v1alpha1"
+	samplesv1alpha1 "github.com/YipYap-run/knative-source/pkg/apis/samples/v1alpha1"
+	versioned "github.com/YipYap-run/knative-source/pkg/client/clientset/versioned"
+	internalinterfaces "github.com/YipYap-run/knative-source/pkg/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/YipYap-run/knative-source/pkg/client/listers/samples/v1alpha1"
 )
 
 // SampleSourceInformer provides access to a shared informer and lister for
