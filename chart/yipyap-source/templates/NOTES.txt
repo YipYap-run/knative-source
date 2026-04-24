@@ -1,0 +1,39 @@
+Thanks for installing {{ .Chart.Name }} {{ .Chart.Version }}.
+
+The controller and admission webhook are running in namespace:
+  {{ include "yipyap-source.namespace" . }}
+
+Next steps:
+
+1. Create a Secret with your YipYap API key:
+
+     kubectl -n <your-ns> create secret generic yipyap-creds \
+       --from-literal=api-key=yy_...
+
+2. Apply a YipYapSource:
+
+     cat <<EOF | kubectl apply -f -
+     apiVersion: sources.yipyap.run/v1alpha1
+     kind: YipYapSource
+     metadata:
+       name: prod-alerts
+       namespace: <your-ns>
+     spec:
+       apiKeyRef:
+         name: yipyap-creds
+       sink:
+         ref:
+           apiVersion: eventing.knative.dev/v1
+           kind: Broker
+           name: default
+       filter:
+         types:
+           - run.yipyap.alert.*
+     EOF
+
+3. Check status:
+
+     kubectl -n <your-ns> get yipyapsources
+     kubectl -n <your-ns> describe yipyapsource prod-alerts
+
+Documentation: https://docs.yipyap.run/integrations/knative/source-crd/
