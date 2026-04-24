@@ -1,0 +1,47 @@
+# Publishes Helm charts from chart/* to the gh-pages branch on every push
+# to main. Users then add the repo with:
+#   helm repo add yipyap-source https://yipyap-run.github.io/knative-source
+#
+# Uses chart-releaser-action (canonical). Chart version bumps in Chart.yaml
+# drive release cuts — no tag required.
+name: Release Charts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "chart/**"
+      - ".github/workflows/release.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        env:
+          ACTOR: ${{ github.actor }}
+        run: |
+          git config user.name  "$ACTOR"
+          git config user.email "$ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.0
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          charts_dir: chart
+          packages_with_index: true
