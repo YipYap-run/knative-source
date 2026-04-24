@@ -1,14 +1,25 @@
-# Knative Eventing Sample Source
+# YipYap Knative Source
 
-[![GoDoc](https://godoc.org/github.com/YipYap-run/knative-source?status.svg)](https://godoc.org/github.com/YipYap-run/knative-source)
-[![Go Report Card](https://goreportcard.com/badge/knative/sample-source)](https://goreportcard.com/report/knative/sample-source)
+`YipYapSource` is a Knative event source that delivers YipYap CloudEvents to
+any Knative sink. It provisions an adapter Deployment per `YipYapSource` CR
+that subscribes to YipYap's event stream (via the `yipyap-knative-source`
+container image) and forwards events to the configured sink.
 
-Knative Eventing `sample-source` defines a simple source that transforms events
-from an HTTP server into CloudEvents and demonstrates the canonical style in
-which Knative Eventing writes sources.
+Apache-2.0 licensed.
 
-To learn more about Knative, please visit our
-[Knative docs](https://github.com/knative/docs) repository.
+## Install
 
-If you are interested in contributing, see [CONTRIBUTING.md](./CONTRIBUTING.md)
-and [DEVELOPMENT.md](./DEVELOPMENT.md).
+```bash
+helm repo add yipyap https://yipyap-run.github.io/charts
+helm install yipyap-source yipyap/yipyap-source \
+  --namespace yipyap-system \
+  --create-namespace
+```
+
+See the full documentation at <https://docs.yipyap.run/integrations/knative/source-crd/>.
+
+## Status
+
+Phase 4 of the YipYap Knative integration (see the design doc in
+[YipYap-run/YipYap](https://github.com/YipYap-run/YipYap)).
+API version: `sources.yipyap.run/v1alpha1`.

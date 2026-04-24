@@ -1,10 +1,8 @@
-# The OWNERS file is used by prow to automatically merge approved PRs.
-
 approvers:
-- productivity-writers
+  - WaffleThief123
 
 reviewers:
-- productivity-writers
+  - WaffleThief123
 
 labels:
-- area/test-and-release
+  - area/test-and-release

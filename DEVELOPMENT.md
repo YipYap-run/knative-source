@@ -1,72 +1,40 @@
 # Development
 
-This doc explains how to setup a development environment so you can get started
-[contributing](https://www.knative.dev/contributing/) to Knative
-`sample-source`. Also take a look at:
+This repo hosts the `YipYapSource` CRD + controller for the YipYap Knative
+integration. It follows Knative's `sample-source` template patterns (module
+layout, `hack/update-codegen.sh`, `knative.dev/pkg` injection framework,
+`ko`-based image builds); we track upstream sample-source changes where they
+are applicable.
 
-- [The pull request workflow](https://knative.dev/community/contributing/reviewing/)
+## Requirements
 
-## Getting started
+- [Go](https://go.dev/doc/install) at the version pinned in `go.mod`.
+- [ko](https://ko.build/) for building and publishing controller/webhook images.
+- A working Kubernetes cluster with Knative Eventing installed.
 
-1. Create [a GitHub account](https://github.com/join)
-1. Setup
-   [GitHub access via SSH](https://help.github.com/articles/connecting-to-github-with-ssh/)
-1. Install [requirements](#requirements)
-1. Set up your [shell environment](#environment-setup)
-1. [Create and checkout a repo fork](#checkout-your-fork)
+## Common tasks
 
-Before submitting a PR, see also [CONTRIBUTING.md](./CONTRIBUTING.md).
+```bash
+# Build everything.
+go build ./...
 
-### Requirements
+# Run the unit tests.
+go test ./...
 
-You must install these tools:
+# Regenerate clientsets, listers, informers, and deepcopy helpers after
+# changing API types under pkg/apis/.
+./hack/update-codegen.sh
 
-1. [`go`](https://golang.org/doc/install): The language Knative `sample-source`
-   is built in
-1. [`git`](https://help.github.com/articles/set-up-git/): For source control
-
-### Environment setup
-
-To get started you'll need to set these environment variables (we recommend
-adding them to your `.bashrc`):
-
-1. `GOPATH`: If you don't have one, simply pick a directory and add
-   `export GOPATH=...`
-
-1. `$GOPATH/bin` on `PATH`: This is so that tooling installed via `go get` will
-   work properly.
-
-`.bashrc` example:
-
-```shell
-export GOPATH="$HOME/go"
-export PATH="${PATH}:${GOPATH}/bin"
+# Verify that generated code is up-to-date (CI does this too).
+./hack/verify-codegen.sh
 ```
 
-### Checkout your fork
+## Image builds
 
-The Go tools require that you clone the repository to the
-`src/github.com/YipYap-run/knative-source` directory in your
-[`GOPATH`](https://github.com/golang/go/wiki/SettingGOPATH).
+Controller and webhook images are published via `ko` to
+`ghcr.io/yipyap-run/knative-source`. Overrides are in [`.ko.yaml`](./.ko.yaml).
 
-To check out this repository:
+## Contributing
 
-1. Create your own
-   [fork of this repo](https://help.github.com/articles/fork-a-repo/)
-
-1. Clone it to your machine:
-
-```shell
-mkdir -p ${GOPATH}/src/knative.dev
-cd ${GOPATH}/src/knative.dev
-git clone git@github.com:${YOUR_GITHUB_USERNAME}/sample-source.git
-cd sample-source
-git remote add upstream https://github.com/knative/sample-source.git
-git remote set-url --push upstream no_push
-```
-
-_Adding the `upstream` remote sets you up nicely for regularly
-[syncing your fork](https://help.github.com/articles/syncing-a-fork/)._
-
-Once you reach this point you are ready to do a full build and deploy as
-described below.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) and the project security policy in
+[SECURITY.md](./SECURITY.md).

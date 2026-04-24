@@ -1,7 +1,8 @@
-# Knative Security Policy
+# Security Policy
 
-We're extremely grateful for security researchers and users that report vulnerabilities to the Knative Open Source Community. All reports are thoroughly investigated by a set of community volunteers.
+Please report security vulnerabilities privately to <security@yipyap.run>.
 
-To make a report, please email the private security@knative.team list with the security details and the details expected for all Knative bug reports.
+Do **not** open a public GitHub issue for security reports. We'll acknowledge
+receipt within three working days and coordinate disclosure from there.
 
-See [Knative Security and Disclosure Information](https://knative.dev/docs/reference/security/) for more details.
+This repo ships Apache-2.0 licensed code; see [LICENSE](./LICENSE).
