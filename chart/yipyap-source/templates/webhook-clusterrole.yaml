@@ -17,12 +17,11 @@ rules:
     resources: ["yipyapsources/status"]
     verbs: ["get", "update", "patch"]
 
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: *everything
+  # Webhook does not reconcile Deployments — that's the controller's job.
+  # Previously granted CRUD; removed as unused (security-review H-7).
 
   - apiGroups: [""]
-    resources: ["secrets", "services"]
+    resources: ["services"]
     verbs: ["get", "list", "watch"]
 
   - apiGroups: [""]
