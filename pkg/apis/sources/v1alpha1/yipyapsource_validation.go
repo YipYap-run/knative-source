@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Knative Authors
+Copyright 2026 The YipYap Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,40 +18,67 @@ package v1alpha1
 
 import (
 	"context"
-	"time"
+	"fmt"
+	"path"
 
 	"knative.dev/pkg/apis"
 )
 
-// Validate validates YipYapSource.
-func (s *YipYapSource) Validate(ctx context.Context) *apis.FieldError {
+// validSeverities is the canonical set of alert severities accepted by
+// YipYapSourceFilter.Severities. Keep in sync with the CloudEvent catalog.
+var validSeverities = map[string]struct{}{
+	"info":     {},
+	"warning":  {},
+	"critical": {},
+}
+
+// Validate validates a YipYapSource.
+func (y *YipYapSource) Validate(ctx context.Context) *apis.FieldError {
+	return y.Spec.Validate(ctx).ViaField("spec")
+}
+
+// Validate validates a YipYapSourceSpec.
+func (s *YipYapSourceSpec) Validate(ctx context.Context) *apis.FieldError {
 	var errs *apis.FieldError
 
-	//example: validation for "spec" field.
-	errs = errs.Also(s.Spec.Validate(ctx).ViaField("spec"))
+	if s.APIKeyRef.Name == "" {
+		errs = errs.Also(apis.ErrMissingField("apiKeyRef.name"))
+	}
 
-	//errs is nil if everything is fine.
+	switch s.Mode {
+	case "", YipYapSourceModeAuto, YipYapSourceModePoll, YipYapSourceModeStream:
+		// ok (empty means "default later").
+	default:
+		errs = errs.Also(apis.ErrInvalidValue(string(s.Mode), "mode"))
+	}
+
+	if s.Filter != nil {
+		errs = errs.Also(s.Filter.Validate(ctx).ViaField("filter"))
+	}
+
+	// Validate the sink via the embedded duck type.
+	errs = errs.Also(s.Sink.Validate(ctx).ViaField("sink"))
+
 	return errs
 }
 
-// Validate validates YipYapSourceSpec.
-func (sspec *YipYapSourceSpec) Validate(ctx context.Context) *apis.FieldError {
-	//Add code for validation webhook for YipYapSourceSpec.
+// Validate validates a YipYapSourceFilter.
+func (f *YipYapSourceFilter) Validate(_ context.Context) *apis.FieldError {
 	var errs *apis.FieldError
 
-	//example: validation for sink field.
-	if fe := sspec.Sink.Validate(ctx); fe != nil {
-		errs = errs.Also(fe.ViaField("sink"))
+	for i, pat := range f.Types {
+		if _, err := path.Match(pat, ""); err != nil {
+			errs = errs.Also(&apis.FieldError{
+				Message: fmt.Sprintf("invalid glob: %v", err),
+				Paths:   []string{fmt.Sprintf("types[%d]", i)},
+			})
+		}
 	}
 
-	//example: validation for interval field.
-	if _, fe := time.ParseDuration(sspec.Interval); fe != nil {
-		errs = errs.Also(apis.ErrInvalidValue(fe, "interval"))
-	}
-
-	//example: validation for serviceAccountName field.
-	if sspec.ServiceAccountName == "" {
-		errs = errs.Also(apis.ErrMissingField("serviceAccountName"))
+	for i, sev := range f.Severities {
+		if _, ok := validSeverities[sev]; !ok {
+			errs = errs.Also(apis.ErrInvalidValue(sev, fmt.Sprintf("severities[%d]", i)))
+		}
 	}
 
 	return errs

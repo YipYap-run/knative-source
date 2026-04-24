@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Knative Authors.
+Copyright 2026 The YipYap Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,70 +17,76 @@ limitations under the License.
 package v1alpha1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
-	"knative.dev/eventing/pkg/apis/duck"
 	"knative.dev/pkg/apis"
 )
 
 const (
-	// SampleConditionReady has status True when the YipYapSource is ready to send events.
-	SampleConditionReady = apis.ConditionReady
+	// YipYapSourceConditionReady is the top-level readiness condition.
+	YipYapSourceConditionReady = apis.ConditionReady
 
-	// SampleConditionSinkProvided has status True when the YipYapSource has been configured with a sink target.
-	SampleConditionSinkProvided apis.ConditionType = "SinkProvided"
+	// YipYapSourceConditionSinkProvided reflects whether the sink URI has
+	// been successfully resolved.
+	YipYapSourceConditionSinkProvided apis.ConditionType = "SinkProvided"
 
-	// SampleConditionDeployed has status True when the YipYapSource has had it's deployment created.
-	SampleConditionDeployed apis.ConditionType = "Deployed"
+	// YipYapSourceConditionDeployed reflects whether the adapter Deployment
+	// is Available per the Deployment controller.
+	YipYapSourceConditionDeployed apis.ConditionType = "Deployed"
 )
 
-var SampleCondSet = apis.NewLivingConditionSet(
-	SampleConditionSinkProvided,
-	SampleConditionDeployed,
+// yipyapSourceCondSet is the set of conditions tracked on every YipYapSource.
+var yipyapSourceCondSet = apis.NewLivingConditionSet(
+	YipYapSourceConditionSinkProvided,
+	YipYapSourceConditionDeployed,
 )
+
+// GetConditionSet returns the condition set (duckv1.KRShaped).
+func (*YipYapSource) GetConditionSet() apis.ConditionSet {
+	return yipyapSourceCondSet
+}
 
 // GetCondition returns the condition currently associated with the given type, or nil.
 func (s *YipYapSourceStatus) GetCondition(t apis.ConditionType) *apis.Condition {
-	return SampleCondSet.Manage(s).GetCondition(t)
+	return yipyapSourceCondSet.Manage(s).GetCondition(t)
 }
 
-// InitializeConditions sets relevant unset conditions to Unknown state.
+// InitializeConditions initializes all conditions to Unknown.
 func (s *YipYapSourceStatus) InitializeConditions() {
-	SampleCondSet.Manage(s).InitializeConditions()
-}
-
-// GetConditionSet returns YipYapSource ConditionSet.
-func (*YipYapSource) GetConditionSet() apis.ConditionSet {
-	return SampleCondSet
-}
-
-// MarkSink sets the condition that the source has a sink configured.
-func (s *YipYapSourceStatus) MarkSink(uri *apis.URL) {
-	s.SinkURI = uri
-	if len(uri.String()) > 0 {
-		SampleCondSet.Manage(s).MarkTrue(SampleConditionSinkProvided)
-	} else {
-		SampleCondSet.Manage(s).MarkUnknown(SampleConditionSinkProvided, "SinkEmpty", "Sink has resolved to empty.")
-	}
-}
-
-// MarkNoSink sets the condition that the source does not have a sink configured.
-func (s *YipYapSourceStatus) MarkNoSink(reason, messageFormat string, messageA ...interface{}) {
-	SampleCondSet.Manage(s).MarkFalse(SampleConditionSinkProvided, reason, messageFormat, messageA...)
-}
-
-// PropagateDeploymentAvailability uses the availability of the provided Deployment to determine if
-// SampleConditionDeployed should be marked as true or false.
-func (s *YipYapSourceStatus) PropagateDeploymentAvailability(d *appsv1.Deployment) {
-	if duck.DeploymentIsAvailable(&d.Status, false) {
-		SampleCondSet.Manage(s).MarkTrue(SampleConditionDeployed)
-	} else {
-		// I don't know how to propagate the status well, so just give the name of the Deployment
-		// for now.
-		SampleCondSet.Manage(s).MarkFalse(SampleConditionDeployed, "DeploymentUnavailable", "The Deployment '%s' is unavailable.", d.Name)
-	}
+	yipyapSourceCondSet.Manage(s).InitializeConditions()
 }
 
 // IsReady returns true if the resource is ready overall.
 func (s *YipYapSourceStatus) IsReady() bool {
-	return SampleCondSet.Manage(s).IsHappy()
+	return yipyapSourceCondSet.Manage(s).IsHappy()
+}
+
+// MarkSink marks the source as having a resolved sink. Passing nil leaves
+// the SinkProvided condition Unknown (the sink has not yet resolved).
+func (s *YipYapSourceStatus) MarkSink(uri *apis.URL) {
+	s.SinkURI = uri
+	if uri != nil && uri.String() != "" {
+		yipyapSourceCondSet.Manage(s).MarkTrue(YipYapSourceConditionSinkProvided)
+	} else {
+		yipyapSourceCondSet.Manage(s).MarkUnknown(YipYapSourceConditionSinkProvided,
+			"SinkEmpty", "Sink has no URI")
+	}
+}
+
+// MarkNoSink marks the source as unable to resolve its sink.
+func (s *YipYapSourceStatus) MarkNoSink(reason, format string, args ...interface{}) {
+	yipyapSourceCondSet.Manage(s).MarkFalse(YipYapSourceConditionSinkProvided, reason, format, args...)
+}
+
+// MarkDeployed marks the adapter Deployment as Available.
+func (s *YipYapSourceStatus) MarkDeployed() {
+	yipyapSourceCondSet.Manage(s).MarkTrue(YipYapSourceConditionDeployed)
+}
+
+// MarkNotDeployed marks the adapter as not yet/no-longer available.
+func (s *YipYapSourceStatus) MarkNotDeployed(reason, format string, args ...interface{}) {
+	yipyapSourceCondSet.Manage(s).MarkFalse(YipYapSourceConditionDeployed, reason, format, args...)
+}
+
+// MarkDeploying marks the adapter as rolling out but not yet Available.
+func (s *YipYapSourceStatus) MarkDeploying(reason, format string, args ...interface{}) {
+	yipyapSourceCondSet.Manage(s).MarkUnknown(YipYapSourceConditionDeployed, reason, format, args...)
 }
