@@ -1,0 +1,54 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validation.webhook.sources.yipyap.run
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+webhooks:
+  - name: validation.webhook.sources.yipyap.run
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    timeoutSeconds: 10
+    clientConfig:
+      service:
+        name: yipyap-source-webhook
+        namespace: {{ include "yipyap-source.namespace" . }}
+        path: /resource-validation
+    rules:
+      - apiGroups:   ["sources.yipyap.run"]
+        apiVersions: ["v1alpha1"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["yipyapsources"]
+        scope:       "Namespaced"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: config.webhook.sources.yipyap.run
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+webhooks:
+  - name: config.webhook.sources.yipyap.run
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    timeoutSeconds: 10
+    clientConfig:
+      service:
+        name: yipyap-source-webhook
+        namespace: {{ include "yipyap-source.namespace" . }}
+        path: /config-validation
+    namespaceSelector:
+      matchExpressions:
+        - key: sources.yipyap.run/release
+          operator: Exists
+    objectSelector:
+      matchLabels:
+        app.kubernetes.io/component: yipyap-source
+    rules:
+      - apiGroups:   [""]
+        apiVersions: ["v1"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["configmaps"]
+        scope:       "Namespaced"
