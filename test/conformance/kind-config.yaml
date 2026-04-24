@@ -1,0 +1,24 @@
+# Kind cluster configuration for the Knative-source conformance suite.
+#
+# Single control-plane node is enough: the tests exercise control-plane
+# reconciliation, not data-plane throughput. Port 80/443 are mapped so that
+# Knative Eventing's default ingress can be reached from the host if a
+# follow-up end-to-end test ever needs it.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: yipyap-conformance
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
