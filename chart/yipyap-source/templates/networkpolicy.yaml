@@ -3,7 +3,12 @@
 #
 # Ingress: controller is never called by external clients (no Service exposed
 # outside metrics). Metrics scraping from the observability stack is allowed
-# via the metrics port.
+# ONLY when the operator has labeled their monitoring namespace explicitly —
+# see metrics.networkPolicy.ingressFromNamespaceLabels. Default-deny: if no
+# selector is configured, no metrics ingress rule is rendered, so scraping
+# is blocked from every other pod in the cluster (security-review A6-N-1
+# round-2 follow-up: prior version rendered `from: []` which is wide-open
+# in NetworkPolicy semantics).
 #
 # Egress: kube-apiserver (for informers + reconcile writes) and DNS.
 apiVersion: networking.k8s.io/v1
@@ -20,19 +25,12 @@ spec:
       control-plane: yipyap-source-controller-manager
   policyTypes: [Ingress, Egress]
   ingress:
-    {{- if .Values.metrics.enabled }}
-    # Metrics scrapers (security-review A6-N-1).
-    # Default: open to any namespace (back-compat). Operators with a known
-    # monitoring namespace set metrics.networkPolicy.ingressFromNamespaceLabels
-    # to restrict the ingress to a labeled namespace selector.
+    {{- if and .Values.metrics.enabled .Values.metrics.networkPolicy.ingressFromNamespaceLabels }}
+    # Metrics scrapers, label-scoped (security-review A6-N-1).
     - from:
-        {{- with .Values.metrics.networkPolicy.ingressFromNamespaceLabels }}
         - namespaceSelector:
             matchLabels:
-              {{- toYaml . | nindent 14 }}
-        {{- else }}
-        []
-        {{- end }}
+              {{- toYaml .Values.metrics.networkPolicy.ingressFromNamespaceLabels | nindent 14 }}
       ports:
         - protocol: TCP
           port: {{ .Values.metrics.port }}
@@ -60,8 +58,15 @@ spec:
 ---
 # NetworkPolicy for the webhook pod.
 #
-# Ingress: kube-apiserver calls the webhook admission endpoint on :8443.
-# Metrics scraping is allowed on the metrics port.
+# Ingress:
+#   * kube-apiserver calls the webhook admission endpoint on :8443. The
+#     apiserver IP is not a stable NetworkPolicy selector across cluster
+#     topologies, so this single rule does allow `from: []` (any peer) —
+#     scoped to the admission port. Operators who can pin their apiserver
+#     to a known IP / namespace should override this template.
+#   * Metrics scraping is gated on metrics.networkPolicy.ingressFromNamespaceLabels;
+#     no rule is rendered when the labels are empty (default-deny — the
+#     same A6-N-1 follow-up applied to the controller).
 #
 # Egress: kube-apiserver + DNS (the webhook patches its own CA bundle into
 # the admission configurations on startup).
@@ -79,22 +84,17 @@ spec:
       role: yipyap-source-webhook
   policyTypes: [Ingress, Egress]
   ingress:
-    # kube-apiserver callback — allow from anywhere since the apiserver IP is
-    # not a static NetworkPolicy peer selector in every cluster.
+    # kube-apiserver callback.
     - from: []
       ports:
         - protocol: TCP
           port: {{ .Values.webhook.port }}
-    {{- if .Values.metrics.enabled }}
-    # Metrics scrapers (security-review A6-N-1).
+    {{- if and .Values.metrics.enabled .Values.metrics.networkPolicy.ingressFromNamespaceLabels }}
+    # Metrics scrapers, label-scoped (security-review A6-N-1).
     - from:
-        {{- with .Values.metrics.networkPolicy.ingressFromNamespaceLabels }}
         - namespaceSelector:
             matchLabels:
-              {{- toYaml . | nindent 14 }}
-        {{- else }}
-        []
-        {{- end }}
+              {{- toYaml .Values.metrics.networkPolicy.ingressFromNamespaceLabels | nindent 14 }}
       ports:
         - protocol: TCP
           port: {{ .Values.metrics.port }}
