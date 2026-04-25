@@ -20,7 +20,7 @@ images:
   # Adapter (receive-adapter) image deployed per-YipYapSource by the controller.
   # Set via the YIPYAP_SOURCE_RA_IMAGE env var on the controller Deployment.
   adapter:
-    repository: ghcr.io/yipyap-run/knative-source
+    repository: ghcr.io/yipyap-run/knative-source-receive-adapter
     tag: ""
 
 # Controller Deployment.
