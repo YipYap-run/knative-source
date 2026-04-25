@@ -1,0 +1,49 @@
+apiVersion: v1
+entries:
+  yipyap-source:
+  - annotations:
+      artifacthub.io/changes: |
+        - First lockstep release with the alerts repo at the same version.
+        - Phase 5 reply catalog support: the controller stamps the
+          receive-adapter image at appVersion, paired with the alerts
+          receive-adapter that consumes the bidirectional reply path.
+        - Round-2 chart hardening: CRD schema rejects unknown fields at
+          apiserver level; controller cluster-wide Secret read removed;
+          scopedNamespaces actually narrows ClusterRole when set;
+          NetworkPolicy default-denies metrics ingress unless labels are
+          configured; PSS-restricted seccomp + readOnlyRootFilesystem on
+          both deployments.
+        - Webhook HA: replicas=2 + PodDisruptionBudget so failurePolicy=Fail
+          no longer makes the webhook a single point of failure during
+          rolling updates.
+        - Tag-driven release workflow with Chart.yaml/tag lockstep
+          enforcement.
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Documentation
+          url: https://docs.yipyap.run/integrations/knative/source-crd/
+    apiVersion: v2
+    appVersion: 1.1.0
+    created: "2026-04-25T08:20:58.789664786Z"
+    description: YipYapSource CRD + controller for the Knative Eventing source.
+    digest: a26c72f81b8438f37ff7b6e0729ced0238616f90fe59b7d6808786415592025f
+    home: https://yipyap.run
+    icon: https://yipyap.run/icon.png
+    keywords:
+    - yipyap
+    - knative
+    - cloudevents
+    - eventing
+    - source
+    - observability
+    maintainers:
+    - name: YipYap
+      url: https://yipyap.run
+    name: yipyap-source
+    sources:
+    - https://github.com/YipYap-run/knative-source
+    type: application
+    urls:
+    - yipyap-source-1.1.0.tgz
+    version: 1.1.0
+generated: "2026-04-25T08:20:58.789681497Z"
