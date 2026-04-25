@@ -1,11 +1,18 @@
 # ko configuration for the YipYap Knative Source controller + webhook.
 #
 # See https://ko.build/configuration/ for the full reference.
+#
+# Base image pinning (security-review A5-LOW): we pin by SHA256 digest, not
+# by `:latest`. `:latest` here would silently move to whatever Chainguard
+# ships next, defeating reproducible-build goals. To bump, update both the
+# digest and the human-readable comment.
+#
+# Current pin: cgr.dev/chainguard/static:latest as of 2026-04-24.
 
-defaultBaseImage: cgr.dev/chainguard/static:latest
+defaultBaseImage: cgr.dev/chainguard/static@sha256:bee469c98ce2df388a2746dc360bd59eb3efe2dab366a01cdcbfd738a2ca1474
 
 baseImageOverrides:
   # The webhook binary wants a minimal base image with certificate support; the
   # chainguard/static image already includes ca-certificates.
-  github.com/YipYap-run/knative-source/cmd/webhook: cgr.dev/chainguard/static:latest
-  github.com/YipYap-run/knative-source/cmd/controller: cgr.dev/chainguard/static:latest
+  github.com/YipYap-run/knative-source/cmd/webhook: cgr.dev/chainguard/static@sha256:bee469c98ce2df388a2746dc360bd59eb3efe2dab366a01cdcbfd738a2ca1474
+  github.com/YipYap-run/knative-source/cmd/controller: cgr.dev/chainguard/static@sha256:bee469c98ce2df388a2746dc360bd59eb3efe2dab366a01cdcbfd738a2ca1474
