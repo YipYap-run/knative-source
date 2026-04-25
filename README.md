@@ -20,6 +20,4 @@ See the full documentation at <https://docs.yipyap.run/integrations/knative/sour
 
 ## Status
 
-Phase 4 of the YipYap Knative integration (see the design doc in
-[YipYap-run/YipYap](https://github.com/YipYap-run/YipYap)).
 API version: `sources.yipyap.run/v1alpha1`.

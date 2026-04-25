@@ -1,5 +1,5 @@
 # Kind cluster configuration for the Knative-source conformance suite.
-#
+
 # Single control-plane node is enough: the tests exercise control-plane
 # reconciliation, not data-plane throughput. Port 80/443 are mapped so that
 # Knative Eventing's default ingress can be reached from the host if a

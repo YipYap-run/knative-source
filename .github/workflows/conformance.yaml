@@ -1,15 +1,15 @@
 # Knative-source conformance workflow.
-#
+
 # Runs the YipYapSource conformance suite against a fresh kind cluster.
 # Gated two ways:
 #   1. A pull request labeled `conformance` fires this workflow via the
 #      `labeled` event. Remove-then-reapply to re-run.
 #   2. Manual trigger from the Actions tab (workflow_dispatch).
-#
+
 # The job is `continue-on-error: true` while the harness matures so a flaky
 # cluster startup doesn't block PRs. Remove the flag once the suite is
 # reliably green across multiple runs.
-#
+
 # Security note: this workflow does not consume any user-controlled event
 # payload in `run:` steps (issue/PR titles, commit messages, etc.). The only
 # event-derived value referenced is `github.event.label.name`, used in an

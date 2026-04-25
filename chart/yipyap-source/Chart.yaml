@@ -21,19 +21,18 @@ maintainers:
 annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
-    - First lockstep release with the alerts repo at the same version.
-    - Phase 5 reply catalog support: the controller stamps the
-      receive-adapter image at appVersion, paired with the alerts
-      receive-adapter that consumes the bidirectional reply path.
-    - Round-2 chart hardening: CRD schema rejects unknown fields at
-      apiserver level; controller cluster-wide Secret read removed;
-      scopedNamespaces actually narrows ClusterRole when set;
-      NetworkPolicy default-denies metrics ingress unless labels are
-      configured; PSS-restricted seccomp + readOnlyRootFilesystem on
-      both deployments.
-    - Webhook HA: replicas=2 + PodDisruptionBudget so failurePolicy=Fail
-      no longer makes the webhook a single point of failure during
-      rolling updates.
+    - Bidirectional reply support: the controller stamps the receive
+      adapter image at appVersion to consume reply CloudEvents from
+      the configured sink.
+    - Chart hardening: CRD schema rejects unknown fields at the
+      apiserver; controller no longer reads cluster-wide Secrets;
+      scopedNamespaces narrows the ClusterRole when set; NetworkPolicy
+      default-denies metrics ingress unless labels are configured;
+      both deployments run under the PSS-restricted profile with
+      seccomp and readOnlyRootFilesystem.
+    - Webhook HA: replicas=2 plus a PodDisruptionBudget so
+      failurePolicy=Fail does not make the webhook a single point of
+      failure during rolling updates.
     - Tag-driven release workflow with Chart.yaml/tag lockstep
       enforcement.
   artifacthub.io/links: |

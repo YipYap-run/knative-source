@@ -20,7 +20,7 @@ spec:
         role: yipyap-source-webhook
     spec:
       serviceAccountName: {{ include "yipyap-source.webhookServiceAccountName" . }}
-      # Pod-level security baseline (security-review A5-NEW-2): the pod runs
+      # Pod-level security baseline: the pod runs
       # as nonroot, drops all capabilities at the container level, and
       # applies the host's RuntimeDefault seccomp profile so the workload
       # passes Kubernetes Pod Security Standard "restricted".

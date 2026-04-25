@@ -1,17 +1,15 @@
-# Release: tag-driven, lockstep across (a) controller + webhook container
-# images on GHCR and (b) the Helm chart on gh-pages.
-#
+# Release: tag-driven, lockstep across (a) controller, webhook, and
+# receive-adapter container images on GHCR and (b) the Helm chart on
+# gh-pages.
+
 # A git tag of the form vX.Y.Z is the only release trigger. The workflow
 # refuses to run unless chart/yipyap-source/Chart.yaml's `version:` AND
 # `appVersion:` already equal X.Y.Z — Chart.yaml is bumped in the same
 # commit that gets tagged, so there's a single source of truth for the
 # version that ships.
-#
-# The receive-adapter image (ghcr.io/yipyap-run/knative-source) is built
-# and pushed by the *alerts* repo's GoReleaser on its own tag push at
-# the same version. The chart's appVersion ties all three images
-# together — operators MUST cut the alerts release first; see
-# RELEASING.md for the runbook.
+
+# All three images share Chart.yaml's appVersion, so the chart pins a
+# self-consistent set of binaries on every release.
 
 name: Release
 

@@ -1,15 +1,13 @@
 {{- if .Values.networkPolicy.enabled }}
 # NetworkPolicy for the controller pod.
-#
+
 # Ingress: controller is never called by external clients (no Service exposed
 # outside metrics). Metrics scraping from the observability stack is allowed
 # ONLY when the operator has labeled their monitoring namespace explicitly —
 # see metrics.networkPolicy.ingressFromNamespaceLabels. Default-deny: if no
 # selector is configured, no metrics ingress rule is rendered, so scraping
-# is blocked from every other pod in the cluster (security-review A6-N-1
-# round-2 follow-up: prior version rendered `from: []` which is wide-open
-# in NetworkPolicy semantics).
-#
+# is blocked from every other pod in the cluster.
+
 # Egress: kube-apiserver (for informers + reconcile writes) and DNS.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -26,7 +24,7 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     {{- if and .Values.metrics.enabled .Values.metrics.networkPolicy.ingressFromNamespaceLabels }}
-    # Metrics scrapers, label-scoped (security-review A6-N-1).
+    # Metrics scrapers, label-scoped.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -57,7 +55,7 @@ spec:
           port: 6443
 ---
 # NetworkPolicy for the webhook pod.
-#
+
 # Ingress:
 #   * kube-apiserver calls the webhook admission endpoint on :8443. The
 #     apiserver IP is not a stable NetworkPolicy selector across cluster
@@ -65,9 +63,9 @@ spec:
 #     scoped to the admission port. Operators who can pin their apiserver
 #     to a known IP / namespace should override this template.
 #   * Metrics scraping is gated on metrics.networkPolicy.ingressFromNamespaceLabels;
-#     no rule is rendered when the labels are empty (default-deny — the
-#     same A6-N-1 follow-up applied to the controller).
-#
+#     no rule is rendered when the labels are empty (default-deny — same
+#     posture applied to the controller).
+
 # Egress: kube-apiserver + DNS (the webhook patches its own CA bundle into
 # the admission configurations on startup).
 apiVersion: networking.k8s.io/v1
@@ -90,7 +88,7 @@ spec:
         - protocol: TCP
           port: {{ .Values.webhook.port }}
     {{- if and .Values.metrics.enabled .Values.metrics.networkPolicy.ingressFromNamespaceLabels }}
-    # Metrics scrapers, label-scoped (security-review A6-N-1).
+    # Metrics scrapers, label-scoped.
     - from:
         - namespaceSelector:
             matchLabels:

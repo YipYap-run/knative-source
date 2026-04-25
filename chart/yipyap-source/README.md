@@ -73,8 +73,8 @@ See [`values.yaml`](./values.yaml) for the authoritative list. Highlights:
 
 ### Controller does NOT read Secrets cluster-wide
 
-After security-review H-6, the controller ClusterRole no longer grants any
-Secret access. The reconciler does not call `coreV1().Secrets().Get()`
+The controller ClusterRole does not grant any Secret access. The
+reconciler does not call `coreV1().Secrets().Get()`
 anywhere — the per-source API key Secret is resolved Pod-side at adapter
 startup via a `SecretKeyRef` envvar, scoped by kubelet to the
 YipYapSource's own namespace.
@@ -104,8 +104,6 @@ to the cluster-wide ClusterRole; pair with a Kyverno/OPA admission policy
 that rejects `YipYapSource` creation outside the listed namespaces, and
 remove the cluster-wide deployment/configmap rules in your overlay if you
 require strict per-namespace scoping.
-
-Tracked as security-review finding H-6.
 
 ### Webhook cert rotation
 
