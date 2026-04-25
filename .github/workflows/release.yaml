@@ -1,29 +1,126 @@
-# Publishes Helm charts from chart/* to the gh-pages branch on every push
-# to main. Users then add the repo with:
-#   helm repo add yipyap-source https://yipyap-run.github.io/knative-source
+# Release: tag-driven, lockstep across (a) controller + webhook container
+# images on GHCR and (b) the Helm chart on gh-pages.
 #
-# Uses chart-releaser-action (canonical). Chart version bumps in Chart.yaml
-# drive release cuts — no tag required.
-name: Release Charts
+# A git tag of the form vX.Y.Z is the only release trigger. The workflow
+# refuses to run unless chart/yipyap-source/Chart.yaml's `version:` AND
+# `appVersion:` already equal X.Y.Z — Chart.yaml is bumped in the same
+# commit that gets tagged, so there's a single source of truth for the
+# version that ships.
+#
+# The receive-adapter image (ghcr.io/yipyap-run/knative-source) is built
+# and pushed by the *alerts* repo's GoReleaser on its own tag push at
+# the same version. The chart's appVersion ties all three images
+# together — operators MUST cut the alerts release first; see
+# RELEASING.md for the runbook.
+
+name: Release
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "chart/**"
-      - ".github/workflows/release.yaml"
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.2.0). Must already exist."
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
+  packages: write
 
 jobs:
-  release:
+  validate:
+    name: Validate version lockstep
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - id: parse
+        name: Compare tag to Chart.yaml
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::tag '$TAG' is not a valid v-prefixed semver — refusing to release"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          CHART_VERSION=$(grep '^version:' chart/yipyap-source/Chart.yaml | awk '{print $2}' | tr -d '"')
+          APP_VERSION=$(grep '^appVersion:' chart/yipyap-source/Chart.yaml | awk '{print $2}' | tr -d '"')
+          if [ "$VERSION" != "$CHART_VERSION" ]; then
+            echo "::error::tag $TAG implies version $VERSION but Chart.yaml version is $CHART_VERSION — bump Chart.yaml in the same commit and re-tag"
+            exit 1
+          fi
+          if [ "$VERSION" != "$APP_VERSION" ]; then
+            echo "::error::tag $TAG implies version $VERSION but Chart.yaml appVersion is $APP_VERSION"
+            exit 1
+          fi
+          echo "Lockstep OK: tag=$TAG version=$VERSION matches Chart.yaml"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  images:
+    name: Publish ${{ matrix.binary }} image
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        binary: [controller, webhook]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install ko (pinned)
+        # Pinned to v0.18.0 so a registry-side compromise of @latest can't
+        # ship a malicious build into our release. Bump the version
+        # intentionally with a comment explaining what changed.
+        run: go install github.com/google/ko@v0.18.0
+
+      - name: Login to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          echo "$GHCR_TOKEN" | ko login ghcr.io --username "$ACTOR" --password-stdin
+
+      - name: ko publish
+        env:
+          # ko publishes to ${KO_DOCKER_REPO}:${tag}. --bare drops the
+          # md5-of-import-path subpath ko adds by default, giving us the
+          # clean repo name the chart expects.
+          KO_DOCKER_REPO: ghcr.io/yipyap-run/knative-source-${{ matrix.binary }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          ko publish --bare \
+            --tags "$VERSION" \
+            --platform=linux/amd64,linux/arm64 \
+            ./cmd/${{ matrix.binary }}
+
+  chart:
+    name: Publish chart
+    needs: images
+    runs-on: ubuntu-latest
+    permissions:
+      # chart-releaser-action commits chart tarballs + index.yaml to gh-pages.
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
 
       - name: Configure git identity
@@ -33,8 +130,7 @@ jobs:
           git config user.name  "$ACTOR"
           git config user.email "$ACTOR@users.noreply.github.com"
 
-      - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: v3.15.0
 
