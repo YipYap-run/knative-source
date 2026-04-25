@@ -27,7 +27,7 @@ jobs:
     # Narrow the label-triggered firing to the specific label we care about.
     # workflow_dispatch always runs.
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'conformance'
-    runs-on: [self-hosted, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     continue-on-error: true
 
