@@ -6,3 +6,8 @@ bazel-*
 *.swp
 .history
 tmp/
+
+# binary built by go build during dev
+receive-adapter
+controller
+webhook
