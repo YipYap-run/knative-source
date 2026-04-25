@@ -28,12 +28,23 @@ controller:
   replicas: 1
   # scopedNamespaces narrows the controller SA's namespace-scoped permissions
   # (Deployments, ConfigMaps) from cluster-wide to a per-namespace Role +
-  # RoleBinding pair for each entry. Empty list (default) keeps the
-  # cluster-wide ClusterRole posture — the canonical Knative source pattern.
+  # RoleBinding pair for each entry.
   #
-  # Note: the controller SA NEVER had cluster-wide Secret read after
-  # security-review H-6. Secret resolution happens in the receive-adapter
-  # Pod via kubelet-side SecretKeyRef in the YipYapSource's namespace.
+  # Behaviour:
+  #   * Empty list (default) — apps/deployments + core/configmaps grants
+  #     are emitted CLUSTER-WIDE on the ClusterRole (canonical Knative
+  #     source pattern; reconcile against any namespace).
+  #   * Non-empty list — the cluster-wide grants are REMOVED from the
+  #     ClusterRole and emitted ONLY as Role + RoleBinding pairs against
+  #     the listed namespaces. Reconciles against any other namespace
+  #     fail closed with RBAC-denied. (security-review H-6 round-2
+  #     follow-up: this used to be additive — Roles created without
+  #     pruning the ClusterRole — which left "narrowed" deployments
+  #     still cluster-wide on Deployments + ConfigMaps.)
+  #
+  # The controller SA is NEVER granted Secret read at any level. The
+  # receive-adapter Pod kubelet-resolves SecretKeyRef in the YipYapSource's
+  # own namespace.
   #
   # Example: scopedNamespaces: ["team-a", "team-b"]
   scopedNamespaces: []
@@ -75,15 +86,22 @@ metrics:
   enabled: true
   port: 9090
   # NetworkPolicy ingress for the metrics endpoint (security-review A6-N-1).
-  # Empty list (default) is `from: []` -> ANY namespace can scrape -> tenant
-  # pods can fingerprint controller version. Operators with a known
-  # monitoring namespace should set:
+  # Default is DENY — when the labels map is empty, no ingress rule is
+  # rendered for the metrics port and scraping is blocked from every other
+  # pod in the cluster. Operators who scrape with Prometheus must set:
+  #
   #   networkPolicy:
   #     ingressFromNamespaceLabels:
   #       kubernetes.io/metadata.name: monitoring
+  #
   # which renders an ingress rule restricted to namespaces carrying the
-  # listed labels. Multiple key/value pairs are AND-combined within a
+  # listed labels. Multiple key/value pairs are AND-combined within the
   # single namespaceSelector.
+  #
+  # Round-2 follow-up: this used to default to `from: []` which is
+  # wide-open in NetworkPolicy semantics (empty/missing `from` matches
+  # all peers). The "tightened" wording in the original A6-N-1 commit
+  # only described the override path; the default still leaked.
   networkPolicy:
     ingressFromNamespaceLabels: {}
 
