@@ -33,7 +33,7 @@ permissions:
 jobs:
   validate:
     name: Validate version lockstep
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, X64]
     outputs:
       version: ${{ steps.parse.outputs.version }}
     steps:
@@ -68,7 +68,7 @@ jobs:
   images:
     name: Publish ${{ matrix.binary }} image
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, X64]
     strategy:
       matrix:
         binary: [controller, webhook]
@@ -113,7 +113,7 @@ jobs:
   chart:
     name: Publish chart
     needs: images
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, X64]
     permissions:
       # chart-releaser-action commits chart tarballs + index.yaml to gh-pages.
       contents: write
