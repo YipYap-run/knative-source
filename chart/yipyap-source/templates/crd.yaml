@@ -35,13 +35,20 @@ spec:
       schema:
         openAPIV3Schema:
           # Static schema floor (security-review A5-NEW-1). Unknown fields are
-          # rejected at apiserver-side validation, even when the admission
-          # webhook is unavailable / failurePolicy=Ignore. The webhook
-          # (yipyapsource_validation.go + yipyapsource_defaults.go) still runs
-          # for cross-field semantics not expressible in OpenAPI.
+          # rejected at apiserver-side validation by Kubernetes' structural-
+          # schema enforcement: when `properties` is specified at any level,
+          # any key not in the list is rejected automatically. Explicit
+          # `additionalProperties: false` is FORBIDDEN by structural-schema
+          # rules (and forbidden at root when the status subresource is
+          # enabled), so we rely on the implicit strict default.
+          #
+          # `required` is also illegal at root when status subresource is
+          # enabled (apiserver injects status, which root-required would
+          # mark as missing on a status-only update), so spec-presence is
+          # enforced inside spec's own children instead — `apiKeyRef` is
+          # required, and the admission webhook (yipyapsource_validation.go)
+          # rejects bodies missing spec entirely.
           type: object
-          required: [spec]
-          additionalProperties: false
           properties:
             apiVersion:
               type: string
@@ -52,12 +59,10 @@ spec:
             spec:
               type: object
               required: [apiKeyRef]
-              additionalProperties: false
               properties:
                 apiKeyRef:
                   type: object
                   required: [name]
-                  additionalProperties: false
                   properties:
                     name:
                       type: string
@@ -85,7 +90,6 @@ spec:
                   pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
                 filter:
                   type: object
-                  additionalProperties: false
                   properties:
                     types:
                       type: array
