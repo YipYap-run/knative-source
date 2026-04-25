@@ -11,8 +11,8 @@ rules:
   # any namespace (canonical Knative-source posture). When scopedNamespaces
   # is set, these grants live ONLY in the per-namespace Roles emitted by
   # scoped-roles.yaml — leaving the ClusterRole free of cluster-wide
-  # apps/deployments and core/configmaps verbs (security-review H-6,
-  # round-2 follow-up: previously additive Roles still left the ClusterRole
+  # apps/deployments and core/configmaps verbs
+  #  previously additive Roles still left the ClusterRole
   # cluster-wide; now they're an exclusive narrowing).
   {{- if not .Values.controller.scopedNamespaces }}
   - apiGroups: ["apps"]
@@ -44,7 +44,7 @@ rules:
     resources: ["leases"]
     verbs: *everything
 
-# Note on Secrets (security-review H-6): the controller SA is NEVER granted
+# Note on Secrets: the controller SA is NEVER granted
 # secret read at any level. The receive-adapter Pod kubelet-dereferences
 # the API key Secret via SecretKeyRef in the YipYapSource's own namespace.
 # Adding a Secret rule here — at any scope — would be a posture regression.

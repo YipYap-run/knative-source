@@ -18,7 +18,7 @@ rules:
     verbs: ["get", "update", "patch"]
 
   # Webhook does not reconcile Deployments — that's the controller's job.
-  # Previously granted CRUD; removed as unused (security-review H-7).
+  # Previously granted CRUD; removed as unused.
 
   - apiGroups: [""]
     resources: ["services"]
@@ -27,9 +27,8 @@ rules:
   # Webhook reads ONLY its own (system) namespace at startup to attach
   # OwnerReferences to its admission ConfigMaps + ValidatingWebhookConfigs.
   # The upstream knative.dev/pkg webhook never calls Patch/Update on
-  # Namespaces; the round-1 grant of patch+list+watch was over-permissive.
-  # Scope by resourceNames to the chart's release namespace
-  # (security-review A6-N-2).
+  # Namespaces, so we grant `get` only — scoped by resourceNames to the
+  # chart's release namespace.
   - apiGroups: [""]
     resources: ["namespaces"]
     resourceNames:
@@ -50,7 +49,7 @@ rules:
     verbs: ["get", "create", "update", "list", "watch"]
 
   # Webhook registration — scoped to this source's own webhookconfigurations
-  # (security-review H-8). The Knative cert controller needs get+update+patch
+  #. The Knative cert controller needs get+update+patch
   # to inject the CA bundle into its own admission configs; it never needs
   # list/create/delete or access to any other webhook configs in the cluster.
   - apiGroups: ["admissionregistration.k8s.io"]

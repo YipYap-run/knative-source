@@ -1,11 +1,11 @@
 # Copyright 2020 The Knative Authors
-#
+
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -50,8 +50,7 @@ rules:
       - update
       - patch
 
-  # Webhook does NOT reconcile Deployments — that's the controller's job
-  # (security-review H-7 — Deployment CRUD removed from webhook SA).
+  # Webhook does NOT reconcile Deployments — that's the controller's job.
 
   # Service read for webhook target service discovery.
   - apiGroups:
@@ -66,7 +65,7 @@ rules:
   # Webhook reads ONLY its own (system) namespace at startup to attach
   # OwnerReferences to its admission ConfigMaps + ValidatingWebhookConfigs.
   # The upstream knative.dev/pkg webhook never calls Patch/Update on
-  # Namespaces (security-review A6-N-2). Scope by resourceNames to the
+  # Namespaces. Scope by resourceNames to the
   # release namespace.
   - apiGroups:
       - ""
@@ -105,7 +104,7 @@ rules:
       - "watch"
 
   # Webhook registration scoped to this source's own webhookconfigurations
-  # only (security-review H-8). Cert controller needs get/update/patch to
+  # only. Cert controller needs get/update/patch to
   # inject the CA bundle; never list/create/delete or other configs.
   - apiGroups:
       - "admissionregistration.k8s.io"

@@ -10,9 +10,9 @@ is mocked.
 The suite is a locally-authored subset of the contract exercised by
 [`knative.dev/eventing/test/conformance/helpers/sources`][upstream]. We do
 not import the upstream helpers directly because doing so drags
-`knative.dev/eventing/test/lib` (the full e2e harness) into our vendor tree,
-which is out of scope for Phase 4. Each test in `conformance_test.go` cites
-the upstream helper it mirrors inline.
+`knative.dev/eventing/test/lib` (the full e2e harness) into our vendor tree.
+Each test in `conformance_test.go` cites the upstream helper it mirrors
+inline.
 
 [upstream]: https://github.com/knative/eventing/tree/main/test/conformance/helpers/sources
 
@@ -30,10 +30,9 @@ the upstream helper it mirrors inline.
 
 ### What is NOT covered yet
 
-- End-to-end event flow (requires a running `yipyap` backend; covered by
-  `test/integration/knative/` in the main yipyap repository).
-- OIDC authentication between adapter and sink (Phase 2 concern, exercised
-  in the yipyap repository).
+- End-to-end event flow (requires a running `yipyap` backend, covered
+  separately).
+- OIDC authentication between adapter and sink (covered separately).
 - Upstream `SourceCRDMetadataTestHelper` and `SourceCRDRBACTestHelper` —
   these assert the CRD manifest ships specific printer columns and that the
   controller ServiceAccount holds the canonical `sources.knative.dev/source`
@@ -56,7 +55,7 @@ Prerequisites:
     -n yipyap-sources --all --timeout=300s
   ```
 
-- The adapter image (`ghcr.io/yipyap-run/knative-source:latest`) reachable
+- The adapter image (`ghcr.io/yipyap-run/knative-source-receive-adapter:latest`) reachable
   from the cluster's node(s). When using kind, `kind load docker-image` the
   three images (controller, webhook, adapter) after building them locally.
 

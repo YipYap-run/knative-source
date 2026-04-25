@@ -16,8 +16,6 @@ receive-adapter Pod resolves SecretKeyRef in its own namespace via kubelet.
 Empty `controller.scopedNamespaces` (default) keeps the cluster-wide
 posture for Deployments + ConfigMaps; setting any namespace narrows the
 posture by carving out per-namespace Role grants instead.
-
-Tracked as security-review finding H-6.
 */}}
 {{- with .Values.controller.scopedNamespaces }}
 {{- $sa := include "yipyap-source.controllerServiceAccountName" $ -}}

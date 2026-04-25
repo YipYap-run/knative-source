@@ -1,8 +1,8 @@
-# Placeholder example for sources.yipyap.run/v1alpha1 YipYapSource.
+# Minimal sources.yipyap.run/v1alpha1 YipYapSource.
 #
-# The canonical reference example lands in Task 4.11 alongside Phase 4 docs.
-# This file exists so downstream Helm tooling and docs can `kubectl apply -f`
-# a minimal working CR during the Phase 4 bring-up.
+# Apply with `kubectl apply -f example.yaml` once the chart is installed.
+# See https://docs.yipyap.run/integrations/knative/source-crd/ for the
+# full reference.
 
 apiVersion: sources.yipyap.run/v1alpha1
 kind: YipYapSource
