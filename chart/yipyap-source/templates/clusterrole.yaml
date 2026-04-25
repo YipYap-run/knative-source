@@ -5,9 +5,23 @@ metadata:
   labels:
     {{- include "yipyap-source.labels" . | nindent 4 }}
 rules:
+  # Namespaced reconcile-target verbs: when controller.scopedNamespaces is
+  # empty, grant cluster-wide on Deployments + ConfigMaps so the controller
+  # can reconcile receive-adapter Pods + read observability ConfigMaps in
+  # any namespace (canonical Knative-source posture). When scopedNamespaces
+  # is set, these grants live ONLY in the per-namespace Roles emitted by
+  # scoped-roles.yaml — leaving the ClusterRole free of cluster-wide
+  # apps/deployments and core/configmaps verbs (security-review H-6,
+  # round-2 follow-up: previously additive Roles still left the ClusterRole
+  # cluster-wide; now they're an exclusive narrowing).
+  {{- if not .Values.controller.scopedNamespaces }}
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: &everything ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  {{- end }}
 
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterroles"]
@@ -15,7 +29,7 @@ rules:
 
   - apiGroups: [""]
     resources: ["events"]
-    verbs: *everything
+    verbs: &everything ["get", "list", "watch", "create", "update", "patch", "delete"]
 
   - apiGroups: ["sources.yipyap.run"]
     resources: ["yipyapsources"]
@@ -25,19 +39,15 @@ rules:
     resources: ["yipyapsources/status", "yipyapsources/finalizers"]
     verbs: ["get", "update", "patch"]
 
-  # ConfigMaps are needed cluster-wide for Knative-style observability config
-  # discovery. Secrets are NOT included here: the controller never reads
-  # Secret values in-process. The receive-adapter Pod kubelet-dereferences
-  # the API key Secret in its own namespace via SecretKeyRef. Cluster-wide
-  # secret read on the controller SA is therefore unused (security-review H-6).
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "list", "watch"]
-
   # Leader election
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: *everything
+
+# Note on Secrets (security-review H-6): the controller SA is NEVER granted
+# secret read at any level. The receive-adapter Pod kubelet-dereferences
+# the API key Secret via SecretKeyRef in the YipYapSource's own namespace.
+# Adding a Secret rule here — at any scope — would be a posture regression.
 
 ---
 # Aggregated source-observer role — grants read-only access to YipYapSources
