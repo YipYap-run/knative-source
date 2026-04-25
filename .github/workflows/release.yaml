@@ -103,6 +103,12 @@ jobs:
           # clean repo name the chart expects.
           KO_DOCKER_REPO: ghcr.io/yipyap-run/knative-source-${{ matrix.binary }}
           VERSION: ${{ needs.validate.outputs.version }}
+          # CGO_ENABLED=0 is required for cross-compiling to linux/arm64 from
+          # an X64 self-hosted runner. Without it `go build` invokes the host
+          # assembler against runtime/cgo's arm64 sources and bails. The
+          # controller and webhook are pure Go (no sqlite, no libgit2, etc),
+          # so disabling cgo just gives us static binaries.
+          CGO_ENABLED: "0"
         run: |
           set -euo pipefail
           ko publish --bare \
