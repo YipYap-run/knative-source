@@ -3,6 +3,50 @@ entries:
   yipyap-source:
   - annotations:
       artifacthub.io/changes: |
+        - Bidirectional reply support: the controller stamps the receive
+          adapter image at appVersion to consume reply CloudEvents from
+          the configured sink.
+        - Chart hardening: CRD schema rejects unknown fields at the
+          apiserver; controller no longer reads cluster-wide Secrets;
+          scopedNamespaces narrows the ClusterRole when set; NetworkPolicy
+          default-denies metrics ingress unless labels are configured;
+          both deployments run under the PSS-restricted profile with
+          seccomp and readOnlyRootFilesystem.
+        - Webhook HA: replicas=2 plus a PodDisruptionBudget so
+          failurePolicy=Fail does not make the webhook a single point of
+          failure during rolling updates.
+        - Tag-driven release workflow with Chart.yaml/tag lockstep
+          enforcement.
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Documentation
+          url: https://docs.yipyap.run/integrations/knative/source-crd/
+    apiVersion: v2
+    appVersion: 1.1.1
+    created: "2026-04-25T09:51:30.558718949Z"
+    description: YipYapSource CRD + controller for the Knative Eventing source.
+    digest: 71a67f9a3dc6576fc8c5a4b656ebd8e13a07aac44950800196f8deec6b5a05b4
+    home: https://yipyap.run
+    icon: https://yipyap.run/icon.png
+    keywords:
+    - yipyap
+    - knative
+    - cloudevents
+    - eventing
+    - source
+    - observability
+    maintainers:
+    - name: YipYap
+      url: https://yipyap.run
+    name: yipyap-source
+    sources:
+    - https://github.com/YipYap-run/knative-source
+    type: application
+    urls:
+    - yipyap-source-1.1.1.tgz
+    version: 1.1.1
+  - annotations:
+      artifacthub.io/changes: |
         - First lockstep release with the alerts repo at the same version.
         - Phase 5 reply catalog support: the controller stamps the
           receive-adapter image at appVersion, paired with the alerts
@@ -46,4 +90,4 @@ entries:
     urls:
     - yipyap-source-1.1.0.tgz
     version: 1.1.0
-generated: "2026-04-25T08:20:58.789681497Z"
+generated: "2026-04-25T09:51:30.558727676Z"
