@@ -1,6 +1,6 @@
 # yipyap-source
 
-Helm chart for the YipYap Knative event source — installs the `YipYapSource`
+Helm chart for the YipYap Knative event source. Installs the `YipYapSource`
 CRD, the reconciling controller, and the admission webhook.
 
 ## TL;DR
@@ -15,7 +15,7 @@ helm install yipyap-source yipyap-source/yipyap-source \
 ## Prerequisites
 
 - Kubernetes 1.27+ (CRD conversion webhooks, admission v1).
-- Knative Eventing installed in the cluster (for sinks — Broker/Channel/Service).
+- Knative Eventing installed in the cluster (for sinks: Broker, Channel, or Service).
 - Outbound network access from cluster to your YipYap control plane
   (either SaaS `https://*.yipyap.run` or your self-hosted install).
 
@@ -75,12 +75,12 @@ See [`values.yaml`](./values.yaml) for the authoritative list. Highlights:
 
 The controller ClusterRole does not grant any Secret access. The
 reconciler does not call `coreV1().Secrets().Get()`
-anywhere — the per-source API key Secret is resolved Pod-side at adapter
+anywhere. The per-source API key Secret is resolved Pod-side at adapter
 startup via a `SecretKeyRef` envvar, scoped by kubelet to the
 YipYapSource's own namespace.
 
 This means a compromised controller SA cannot exfiltrate Secrets from
-unrelated tenants — the blast radius of an SA token compromise is bounded
+unrelated tenants. The blast radius of an SA token compromise is bounded
 to the cluster-wide read of `configmaps`, `events`, and the
 namespace-scoped CRUD on adapter `Deployments`.
 
@@ -114,17 +114,17 @@ itself rotates via the same controller loop on a 30-day cadence by default.
 
 For operators who want managed rotation:
 
-- **cert-manager** — annotate the `yipyap-source-webhook-certs` Secret and
+- **cert-manager**: annotate the `yipyap-source-webhook-certs` Secret and
   point a `cert-manager.io/Issuer` at it; disable the in-process rotation
   by overriding `webhook.failurePolicy` and supplying your own bundle.
-- **Manual rollout** — `kubectl rollout restart deployment/yipyap-source-webhook
+- **Manual rollout**: `kubectl rollout restart deployment/yipyap-source-webhook
   -n yipyap-sources` will trigger a fresh in-process rotation; webhook HA
   (`replicas: 2` + PDB `minAvailable: 1`) keeps admission responsive
   during the rollover.
 
 ## Upgrade notes
 
-- The webhook self-signs a CA at startup — there is no cert-manager dependency
+- The webhook self-signs a CA at startup; there is no cert-manager dependency
   and no chart-side TLS material to rotate by default. See "Webhook cert
   rotation" above for managed-rotation options.
 - CRD updates are applied in-place when `installCRD=true`. If you need

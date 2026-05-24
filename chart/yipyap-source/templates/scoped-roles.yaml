@@ -10,7 +10,7 @@ cluster-wide.
 The cluster-wide ClusterRole (clusterrole.yaml) still grants the
 non-namespaced verbs the controller needs (events, yipyapsources,
 clusterroles/list, leases). Secrets are intentionally not granted at any
-level — the controller never reads Secret values in-process; the
+level. The controller never reads Secret values in-process; the
 receive-adapter Pod resolves SecretKeyRef in its own namespace via kubelet.
 
 Empty `controller.scopedNamespaces` (default) keeps the cluster-wide

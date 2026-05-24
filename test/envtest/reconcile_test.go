@@ -67,7 +67,7 @@ func TestCRD_CreatesYipYapSource(t *testing.T) {
 }
 
 // TestCRD_StatusSubresource verifies the status subresource is enabled in the
-// CRD — Status().Update must mutate status independently of spec.
+// CRD: Status().Update must mutate status independently of spec.
 func TestCRD_StatusSubresource(t *testing.T) {
 	ns := "crd-status"
 	newNamespace(t, ns)
@@ -85,7 +85,7 @@ func TestCRD_StatusSubresource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Mutate status only — the status subresource must accept this.
+	// Mutate status only; the status subresource must accept this.
 	src.Status.InitializeConditions()
 	src.Status.DeploymentName = "prod-source-abc"
 	if err := testClient.Status().Update(testCtx, src); err != nil {
@@ -102,7 +102,7 @@ func TestCRD_StatusSubresource(t *testing.T) {
 }
 
 // TestCRD_ListByLabel proves label selectors work via the real API server's
-// indexer — exercises list + watch plumbing end-to-end.
+// indexer; exercises list + watch plumbing end-to-end.
 func TestCRD_ListByLabel(t *testing.T) {
 	ns := "crd-list"
 	newNamespace(t, ns)
@@ -142,7 +142,7 @@ func TestCRD_ListByLabel(t *testing.T) {
 // between the API-server's schema validation and our admission webhook. The
 // CRD uses x-kubernetes-preserve-unknown-fields, so the API server accepts
 // any Mode string; the webhook (not installed in this envtest) is the one
-// that rejects bogus values. This test pins that contract — if we ever add
+// that rejects bogus values. This test pins that contract: if we ever add
 // structural-schema enum validation to the CRD itself, this test must fail
 // loudly so we revisit the webhook's responsibility.
 func TestCRD_AcceptsAnyModeAtAPITier(t *testing.T) {
