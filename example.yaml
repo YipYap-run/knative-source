@@ -10,6 +10,11 @@ metadata:
   name: yipyap-source-example
   namespace: yipyap-sources
 spec:
+  # apiKeyRef is required. Name the Secret that contains your YipYap API key.
+  # kubectl -n yipyap-sources create secret generic yipyap-creds \
+  #   --from-literal=api-key=yy_...
+  apiKeyRef:
+    name: yipyap-creds
   # The Knative sink to which YipYap CloudEvents will be delivered.
   sink:
     ref:

@@ -36,12 +36,20 @@ spec:
         status: {}
       schema:
         openAPIV3Schema:
-          # Static schema floor. Unknown fields are
-          # rejected at apiserver-side validation, even when the admission
-          # webhook is unavailable / failurePolicy=Ignore.
+          # Static schema floor. Unknown fields are rejected at
+          # apiserver-side validation even when the admission webhook is
+          # unavailable / failurePolicy=Ignore.
+          #
+          # `additionalProperties: false` is FORBIDDEN by the Kubernetes
+          # structural-schema rules when the status subresource is enabled
+          # (the apiserver rejects the CRD registration). We rely on the
+          # implicit strict default instead.
+          #
+          # `required: [spec]` at root is also illegal when the status
+          # subresource is enabled: the apiserver issues status-only writes
+          # that omit spec, which root-required would reject. spec-presence
+          # is enforced by the admission webhook instead.
           type: object
-          required: [spec]
-          additionalProperties: false
           properties:
             apiVersion:
               type: string

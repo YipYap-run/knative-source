@@ -50,7 +50,7 @@ rules:
       - update
       - patch
 
-  # Webhook does NOT reconcile Deployments — that's the controller's job.
+  # Webhook does NOT reconcile Deployments; that is the controller's job.
 
   # Service read for webhook target service discovery.
   - apiGroups:

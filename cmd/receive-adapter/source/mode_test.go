@@ -43,9 +43,9 @@ func baseCfg(t *testing.T, baseURL string) *Config {
 
 func TestResolveMode_EnvPoll(t *testing.T) {
 	srv := makeHintServer(t, http.StatusOK, map[string]any{
-		"recommended_mode":       "stream",
-		"poll_interval_seconds":  10,
-		"refresh_after_seconds":  600,
+		"recommended_mode":      "stream",
+		"poll_interval_seconds": 10,
+		"refresh_after_seconds": 600,
 	})
 	defer srv.Close()
 	cfg := baseCfg(t, srv.URL)

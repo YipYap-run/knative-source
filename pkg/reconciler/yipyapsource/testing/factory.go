@@ -83,13 +83,13 @@ func (l *Listers) indexerFor(obj runtime.Object) cache.Indexer {
 }
 
 // GetKubeObjects returns objects that belong to the Kubernetes core scheme
-// (Deployments, Events, etc.) — what we hand to fakekubeclient.
+// (Deployments, Events, etc.) passed to fakekubeclient.
 func (l *Listers) GetKubeObjects() []runtime.Object {
 	return l.sorter.ObjectsForSchemeFunc(fakekubeclientset.AddToScheme)
 }
 
-// GetYipYapSourceObjects returns objects that belong to our CR scheme — what
-// we hand to fakeyipyapclient.
+// GetYipYapSourceObjects returns objects that belong to our CR scheme,
+// passed to fakeyipyapclient.
 func (l *Listers) GetYipYapSourceObjects() []runtime.Object {
 	return l.sorter.ObjectsForSchemeFunc(v1alpha1.AddToScheme)
 }

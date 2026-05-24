@@ -129,7 +129,7 @@ func TestYipYapSource_SetDefaults_SinkNamespaceFromParent(t *testing.T) {
 					APIVersion: "eventing.knative.dev/v1",
 					Kind:       "Broker",
 					Name:       "default",
-					// Namespace omitted — should inherit from parent.
+					// Namespace omitted; should inherit from parent.
 				}},
 			},
 		},

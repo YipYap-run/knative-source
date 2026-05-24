@@ -10,9 +10,10 @@ Apache-2.0 licensed.
 ## Install
 
 ```bash
-helm repo add yipyap https://yipyap-run.github.io/charts
-helm install yipyap-source yipyap/yipyap-source \
-  --namespace yipyap-system \
+helm repo add yipyap-source https://yipyap-run.github.io/knative-source
+helm repo update
+helm install yipyap-source yipyap-source/yipyap-source \
+  --namespace yipyap-sources \
   --create-namespace
 ```
 

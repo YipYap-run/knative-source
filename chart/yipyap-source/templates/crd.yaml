@@ -45,7 +45,7 @@ spec:
           # `required` is also illegal at root when status subresource is
           # enabled (apiserver injects status, which root-required would
           # mark as missing on a status-only update), so spec-presence is
-          # enforced inside spec's own children instead — `apiKeyRef` is
+          # enforced inside spec's own children instead: `apiKeyRef` is
           # required, and the admission webhook (yipyapsource_validation.go)
           # rejects bodies missing spec entirely.
           type: object

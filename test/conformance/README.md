@@ -33,7 +33,7 @@ inline.
 - End-to-end event flow (requires a running `yipyap` backend, covered
   separately).
 - OIDC authentication between adapter and sink (covered separately).
-- Upstream `SourceCRDMetadataTestHelper` and `SourceCRDRBACTestHelper` —
+- Upstream `SourceCRDMetadataTestHelper` and `SourceCRDRBACTestHelper`:
   these assert the CRD manifest ships specific printer columns and that the
   controller ServiceAccount holds the canonical `sources.knative.dev/source`
   aggregated ClusterRole. Adding them requires importing `testlib`; tracked
@@ -69,7 +69,7 @@ KUBECONFIG=$HOME/.kube/config \
 The build tag `conformance` gates the package; a default `go test ./...`
 does not compile or execute these tests. If `KUBECONFIG` is not set and no
 default kubeconfig is discoverable, the suite exits cleanly with a skip
-notice — this keeps `go test -tags conformance ./...` a useful build check
+notice; this keeps `go test -tags conformance ./...` a useful build check
 on developer machines.
 
 [ke-install]: https://knative.dev/docs/install/
@@ -79,7 +79,7 @@ on developer machines.
 A `Conformance` workflow at `.github/workflows/conformance.yaml` runs the
 suite against a freshly-provisioned kind cluster. It's gated two ways:
 
-1. Add the `conformance` label to a pull request — the workflow fires on the
+1. Add the `conformance` label to a pull request; the workflow fires on the
    `labeled` event.
 2. Trigger manually via the Actions tab (`workflow_dispatch`).
 
@@ -90,13 +90,13 @@ available as published artifacts; building them inside CI is a follow-up.
 
 ## Troubleshooting
 
-- **Tests hang on "Ready never reached True"** — the subtest dumps every
+- **Tests hang on "Ready never reached True"**: the subtest dumps every
   condition on the source before failing. Check `SinkProvided`: it should be
   `True` if the sink ref resolves, `False` with a reason if the controller
   rejected the ref, or `Unknown` if reconcile hasn't run at all.
-- **"adapter Deployment not Available"** — usually means the adapter image
+- **"adapter Deployment not Available"**: usually means the adapter image
   can't be pulled, or the adapter is crash-looping on a missing API key.
   `kubectl describe deploy -n <conformance-ns> <deploymentName>`.
-- **Namespace leaks after a test crash** — every test registers a cleanup
+- **Namespace leaks after a test crash**: every test registers a cleanup
   that deletes its namespace. If Go panics before cleanup runs, delete
   leftover namespaces with `kubectl delete ns -l yipyap.run/conformance=true`.

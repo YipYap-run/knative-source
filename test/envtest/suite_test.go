@@ -19,7 +19,7 @@ limitations under the License.
 
 // Package envtest exercises the YipYapSource CRD against a real kube-apiserver
 // + etcd via sigs.k8s.io/controller-runtime/pkg/envtest. It does NOT run the
-// reconciler or the admission webhook — those are covered by the table-driven
+// reconciler or the admission webhook; those are covered by the table-driven
 // tests in pkg/reconciler/yipyapsource and the webhook package. Here we verify
 // that the CRD registers, that objects round-trip through real storage, and
 // that the status subresource behaves. Gated behind the `envtest` build tag so

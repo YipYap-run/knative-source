@@ -51,8 +51,8 @@ const (
 	// Webhook admission-controller names. These are the canonical
 	// `*.sources.yipyap.run` identifiers that MutatingWebhookConfiguration
 	// and ValidatingWebhookConfiguration resources must match.
-	defaultingWebhookName      = "defaulting.webhook.sources.yipyap.run"
-	validationWebhookName      = "validation.webhook.sources.yipyap.run"
+	defaultingWebhookName       = "defaulting.webhook.sources.yipyap.run"
+	validationWebhookName       = "validation.webhook.sources.yipyap.run"
 	configValidationWebhookName = "config.webhook.sources.yipyap.run"
 )
 

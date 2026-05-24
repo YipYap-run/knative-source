@@ -22,7 +22,7 @@ Pick a version (e.g. `v0.2.0`) and:
 ```sh
 git checkout main && git pull
 
-# Edit chart/yipyap-source/Chart.yaml — bump BOTH:
+# Edit chart/yipyap-source/Chart.yaml - bump BOTH:
 #   version: 0.2.0
 #   appVersion: 0.2.0
 # Edit annotations.artifacthub.io/changes if you want a changelog entry.
@@ -46,7 +46,7 @@ The tag push triggers `.github/workflows/release.yaml`, which:
 3. **Releases the chart.** `chart-releaser-action` packages the chart and
    publishes to gh-pages with `index.yaml` pointing at the tarball.
 
-Total time end-to-end: ~6–8 minutes.
+Total time end-to-end: ~6-8 minutes.
 
 ### Verify
 
@@ -74,15 +74,15 @@ missing at the chart's `appVersion`. Check which with `kubectl describe pod`.
 
 Bump only `chart/yipyap-source/Chart.yaml` `version:` (e.g. `0.2.1`) and
 leave `appVersion: 0.2.0`. Today the lockstep check is strict equality, so
-chart-only revisions need a matching tag and image rebuild — usually fine
-because rebuilds are cheap. If chart-only revisions become common, extend
+chart-only revisions need a matching tag and image rebuild (usually fine
+because rebuilds are cheap). If chart-only revisions become common, extend
 the validate step to allow `version >= appVersion`.
 
 ## Pre-release tags
 
 The version regex accepts `v0.2.0-rc.1`, `v0.2.0-alpha.3`, etc. Chart
 versions follow the same pattern. Pre-release tags publish to GHCR and
-gh-pages identically to GA — no extra channel separation today.
+gh-pages identically to GA; no extra channel separation today.
 
 ## Rolling back
 
@@ -94,5 +94,5 @@ To roll back:
 2. Bump consumers' `--version` flag on `helm upgrade`.
 
 If the bad release is already in production at customer sites, do not
-delete the gh-pages chart entry — that breaks `helm rollback`. Mark it as
+delete the gh-pages chart entry (that breaks `helm rollback`). Mark it as
 deprecated via `Chart.yaml`'s `deprecated: true` and ship a new minor.

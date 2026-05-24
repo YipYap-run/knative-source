@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# MutatingWebhookConfiguration — runs SetDefaults() on every YipYapSource.
+# MutatingWebhookConfiguration: runs SetDefaults() on every YipYapSource.
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
@@ -37,7 +37,7 @@ webhooks:
         scope:       "Namespaced"
 
 ---
-# ValidatingWebhookConfiguration — runs Validate() on every YipYapSource.
+# ValidatingWebhookConfiguration: runs Validate() on every YipYapSource.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -63,7 +63,7 @@ webhooks:
         scope:       "Namespaced"
 
 ---
-# ValidatingWebhookConfiguration — validates our pinned ConfigMaps so bad
+# ValidatingWebhookConfiguration: validates our pinned ConfigMaps so bad
 # logging/observability configs are rejected at write time.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -98,7 +98,7 @@ webhooks:
 
 ---
 # Webhook-cert Secret. Populated at startup by knative.dev/pkg/webhook/certificates
-# — self-signs a CA, no cert-manager dependency.
+# Self-signs a CA; no cert-manager dependency.
 apiVersion: v1
 kind: Secret
 metadata:

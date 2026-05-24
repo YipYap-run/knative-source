@@ -26,7 +26,7 @@ limitations under the License.
 //
 // All files in this package carry the `conformance` build tag so a default
 // `go test ./...` never attempts to run against a real cluster. The suite
-// must, however, BUILD cleanly under `go vet -tags conformance ./...` — the
+// must, however, BUILD cleanly under `go vet -tags conformance ./...`; the
 // envtest package follows the same convention.
 //
 // To run locally against a kind cluster with the controller installed via
@@ -71,7 +71,7 @@ const (
 )
 
 // TestMain discovers the cluster. When no KUBECONFIG is set we skip the whole
-// suite rather than fail — that keeps `go test -tags conformance ./...` a
+// suite rather than fail; that keeps `go test -tags conformance ./...` a
 // useful *build* check on developer machines.
 func TestMain(m *testing.M) {
 	utilruntime.Must(sourcesv1alpha1.AddToScheme(scheme.Scheme))

@@ -79,9 +79,9 @@ func TestLoadConfig_MissingAPIKey(t *testing.T) {
 
 func TestLoadConfig_InvalidCEOverrides(t *testing.T) {
 	_, err := LoadConfig(fakeEnv(map[string]string{
-		"K_SINK":          "http://sink.example/",
-		"YIPYAP_API_KEY":  "secret",
-		"K_CE_OVERRIDES":  "not-json{",
+		"K_SINK":         "http://sink.example/",
+		"YIPYAP_API_KEY": "secret",
+		"K_CE_OVERRIDES": "not-json{",
 	}))
 	if err == nil {
 		t.Fatal("expected error for invalid K_CE_OVERRIDES JSON, got nil")
