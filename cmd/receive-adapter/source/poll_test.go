@@ -210,4 +210,3 @@ func TestPollClient_CursorAtomicWrite(t *testing.T) {
 		t.Fatalf("cursor content: got %q, want 'abc'", string(b))
 	}
 }
-
