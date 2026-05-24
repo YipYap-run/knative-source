@@ -3,6 +3,7 @@ package source
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -13,7 +14,7 @@ type Config struct {
 	CEOverrides  map[string]string // parsed from K_CE_OVERRIDES
 	APIKey       string            // YIPYAP_API_KEY
 	BaseURL      string            // YIPYAP_BASE_URL
-	EventFilter  string            // YIPYAP_EVENT_FILTER (path.Match glob over CloudEvent type)
+	EventFilters []string          // YIPYAP_EVENT_FILTER, parsed: comma-separated path.Match globs over the CloudEvent type, OR-matched server-side
 	Mode         string            // "", "poll", or "stream"
 	PollInterval time.Duration     // YIPYAP_POLL_INTERVAL
 	CursorPath   string            // YIPYAP_CURSOR_PATH
@@ -39,7 +40,7 @@ func LoadConfig(getenv func(string) string) (*Config, error) {
 		Sink:           getenv("K_SINK"),
 		APIKey:         getenv("YIPYAP_API_KEY"),
 		BaseURL:        defaultStr(getenv("YIPYAP_BASE_URL"), "https://console.yipyap.run"),
-		EventFilter:    getenv("YIPYAP_EVENT_FILTER"),
+		EventFilters:   parseEventFilters(getenv("YIPYAP_EVENT_FILTER")),
 		Mode:           getenv("YIPYAP_MODE"),
 		CursorPath:     defaultStr(getenv("YIPYAP_CURSOR_PATH"), "/var/run/yipyap/cursor"),
 		HealthAddr:     defaultStr(getenv("YIPYAP_HEALTH_ADDR"), ":8080"),
@@ -88,4 +89,17 @@ func defaultStr(v, def string) string {
 		return def
 	}
 	return v
+}
+
+// parseEventFilters splits the comma-separated YIPYAP_EVENT_FILTER value into
+// individual type globs, trimming surrounding whitespace and dropping empty
+// entries. An empty or all-blank value yields a nil slice (no filtering).
+func parseEventFilters(raw string) []string {
+	var filters []string
+	for _, part := range strings.Split(raw, ",") {
+		if f := strings.TrimSpace(part); f != "" {
+			filters = append(filters, f)
+		}
+	}
+	return filters
 }

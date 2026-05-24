@@ -200,7 +200,7 @@ func TestMakeAdapterDeployment_FullSpec(t *testing.T) {
 	src := baseSource()
 	src.Spec.ServiceAccountName = "adapter-sa"
 	src.Spec.Filter = &v1alpha1.YipYapSourceFilter{
-		Types: []string{"run.yipyap.alert.*"},
+		Types: []string{"run.yipyap.alert.*", "run.yipyap.monitor.state"},
 	}
 	src.Spec.CloudEventOverrides = &duckv1.CloudEventOverrides{
 		Extensions: map[string]string{"env": "prod", "region": "us"},
@@ -216,8 +216,8 @@ func TestMakeAdapterDeployment_FullSpec(t *testing.T) {
 		t.Errorf("ServiceAccountName: got %q, want %q", d.Spec.Template.Spec.ServiceAccountName, "adapter-sa")
 	}
 
-	// Filter first type
-	if got, want := envByName(t, c.Env, "YIPYAP_EVENT_FILTER").Value, "run.yipyap.alert.*"; got != want {
+	// All filter types are forwarded as a comma-separated list.
+	if got, want := envByName(t, c.Env, "YIPYAP_EVENT_FILTER").Value, "run.yipyap.alert.*,run.yipyap.monitor.state"; got != want {
 		t.Errorf("YIPYAP_EVENT_FILTER: got %q, want %q", got, want)
 	}
 
@@ -248,6 +248,17 @@ func TestMakeAdapterDeployment_ChildNameDeterministic(t *testing.T) {
 	wantPrefix := testName + "-source-"
 	if got := d1.Name; len(got) < len(wantPrefix) || got[:len(wantPrefix)] != wantPrefix {
 		t.Errorf("Name prefix: got %q, want prefix %q", got, wantPrefix)
+	}
+}
+
+// A single filter type forwards verbatim (no trailing comma).
+func TestMakeAdapterDeployment_SingleFilterType(t *testing.T) {
+	src := baseSource()
+	src.Spec.Filter = &v1alpha1.YipYapSourceFilter{Types: []string{"run.yipyap.alert.*"}}
+	d := MakeAdapterDeployment(src, sinkURL(t), testImage)
+	c := d.Spec.Template.Spec.Containers[0]
+	if got, want := envByName(t, c.Env, "YIPYAP_EVENT_FILTER").Value, "run.yipyap.alert.*"; got != want {
+		t.Errorf("YIPYAP_EVENT_FILTER: got %q, want %q", got, want)
 	}
 }
 

@@ -16,11 +16,12 @@ import (
 
 // newTestStreamClient returns a StreamClient wired to the supplied baseURL
 // with defaults sensible for tests (no HTTP timeout; stream is long-lived).
-func newTestStreamClient(_ *testing.T, baseURL, apiKey, filter string) *StreamClient {
+// Pass any number of filter globs (or none).
+func newTestStreamClient(_ *testing.T, baseURL, apiKey string, filters ...string) *StreamClient {
 	return &StreamClient{
 		baseURL:    baseURL,
 		apiKey:     apiKey,
-		filter:     filter,
+		filters:    filters,
 		httpClient: &http.Client{},
 	}
 }
@@ -66,7 +67,7 @@ func TestStreamClient_ReceivesEvents(t *testing.T) {
 	}))
 	defer func() { close(stop); srv.Close() }()
 
-	c := newTestStreamClient(t, srv.URL, "k", "")
+	c := newTestStreamClient(t, srv.URL, "k")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -119,7 +120,7 @@ func TestStreamClient_Reconnects(t *testing.T) {
 	}))
 	defer func() { close(stop); srv.Close() }()
 
-	c := newTestStreamClient(t, srv.URL, "k", "")
+	c := newTestStreamClient(t, srv.URL, "k")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -174,7 +175,7 @@ func TestStreamClient_Auth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newTestStreamClient(t, srv.URL, key, "")
+	c := newTestStreamClient(t, srv.URL, key)
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	_ = c.stream(ctx, func(_ context.Context, _ ce.Event) error { return nil })
@@ -184,6 +185,55 @@ func TestStreamClient_Auth(t *testing.T) {
 	}
 	if gotAcceptHdr != "application/cloudevents-batch+json" {
 		t.Fatalf("Accept: got %q", gotAcceptHdr)
+	}
+}
+
+// TestStreamClient_FilterQueryParams: the configured filters each ride the
+// stream URL as their own repeated ?filter= parameter; with none configured
+// no filter param is present.
+func TestStreamClient_FilterQueryParams(t *testing.T) {
+	tests := []struct {
+		name    string
+		filters []string
+		want    []string
+	}{
+		{name: "none", filters: nil, want: nil},
+		{name: "single", filters: []string{"run.yipyap.alert.*"}, want: []string{"run.yipyap.alert.*"}},
+		{
+			name:    "multiple",
+			filters: []string{"run.yipyap.alert.*", "run.yipyap.monitor.state"},
+			want:    []string{"run.yipyap.alert.*", "run.yipyap.monitor.state"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotFilters []string
+			stop := make(chan struct{})
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotFilters = r.URL.Query()["filter"]
+				w.Header().Set("Content-Type", "application/cloudevents-batch+json")
+				w.WriteHeader(http.StatusOK)
+				select {
+				case <-stop:
+				case <-r.Context().Done():
+				}
+			}))
+			defer func() { close(stop); srv.Close() }()
+
+			c := newTestStreamClient(t, srv.URL, "k", tc.filters...)
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			defer cancel()
+			_ = c.stream(ctx, func(_ context.Context, _ ce.Event) error { return nil })
+
+			if len(gotFilters) != len(tc.want) {
+				t.Fatalf("filter query: got %v, want %v", gotFilters, tc.want)
+			}
+			for i := range tc.want {
+				if gotFilters[i] != tc.want[i] {
+					t.Errorf("filter[%d]: got %q, want %q", i, gotFilters[i], tc.want[i])
+				}
+			}
+		})
 	}
 }
 
@@ -201,7 +251,7 @@ func TestStreamClient_ContextCancelExits(t *testing.T) {
 	}))
 	defer func() { close(stop); srv.Close() }()
 
-	c := newTestStreamClient(t, srv.URL, "k", "")
+	c := newTestStreamClient(t, srv.URL, "k")
 	ctx, cancel := context.WithCancel(context.Background())
 
 	done := make(chan struct{})
@@ -245,7 +295,7 @@ func TestStreamClient_MalformedLineSkipped(t *testing.T) {
 	}))
 	defer func() { close(stop); srv.Close() }()
 
-	c := newTestStreamClient(t, srv.URL, "k", "")
+	c := newTestStreamClient(t, srv.URL, "k")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 

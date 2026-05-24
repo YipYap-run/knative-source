@@ -20,6 +20,7 @@ package resources
 
 import (
 	"encoding/json"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -92,9 +93,13 @@ func MakeAdapterDeployment(src *v1alpha1.YipYapSource, sink *apis.URL, image str
 	}
 
 	if src.Spec.Filter != nil && len(src.Spec.Filter.Types) > 0 {
+		// Forward every type glob as a comma-separated list. The adapter
+		// splits these back out and sends one filter query param per type,
+		// which the alerts server OR-matches. Type globs (e.g.
+		// "run.yipyap.alert.*") never contain commas, so CSV is unambiguous.
 		env = append(env, corev1.EnvVar{
 			Name:  "YIPYAP_EVENT_FILTER",
-			Value: src.Spec.Filter.Types[0],
+			Value: strings.Join(src.Spec.Filter.Types, ","),
 		})
 	}
 

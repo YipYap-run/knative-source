@@ -30,8 +30,8 @@ func TestLoadConfig_Minimal(t *testing.T) {
 	if cfg.BaseURL != "https://console.yipyap.run" {
 		t.Errorf("BaseURL default = %q, want https://console.yipyap.run", cfg.BaseURL)
 	}
-	if cfg.EventFilter != "" {
-		t.Errorf("EventFilter default = %q, want empty", cfg.EventFilter)
+	if len(cfg.EventFilters) != 0 {
+		t.Errorf("EventFilters default = %v, want empty", cfg.EventFilters)
 	}
 	if cfg.Mode != "" {
 		t.Errorf("Mode default = %q, want empty", cfg.Mode)
@@ -50,6 +50,45 @@ func TestLoadConfig_Minimal(t *testing.T) {
 	}
 	if len(cfg.CEOverrides) != 0 {
 		t.Errorf("CEOverrides should be empty, got %v", cfg.CEOverrides)
+	}
+}
+
+func TestLoadConfig_EventFilters(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want []string
+	}{
+		{name: "unset", raw: "", want: nil},
+		{name: "single", raw: "run.yipyap.alert.*", want: []string{"run.yipyap.alert.*"}},
+		{name: "multiple", raw: "a.*,b.*", want: []string{"a.*", "b.*"}},
+		{name: "whitespace trimmed", raw: " a.* , b.* ", want: []string{"a.*", "b.*"}},
+		{name: "empties dropped", raw: "a.*,,b.*,", want: []string{"a.*", "b.*"}},
+		{name: "only commas", raw: ",,", want: nil},
+		{name: "only whitespace", raw: "  ", want: nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env := map[string]string{
+				"K_SINK":         "http://sink.example/",
+				"YIPYAP_API_KEY": "secret",
+			}
+			if tc.raw != "" {
+				env["YIPYAP_EVENT_FILTER"] = tc.raw
+			}
+			cfg, err := LoadConfig(fakeEnv(env))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(cfg.EventFilters) != len(tc.want) {
+				t.Fatalf("EventFilters = %v, want %v", cfg.EventFilters, tc.want)
+			}
+			for i := range tc.want {
+				if cfg.EventFilters[i] != tc.want[i] {
+					t.Errorf("EventFilters[%d] = %q, want %q", i, cfg.EventFilters[i], tc.want[i])
+				}
+			}
+		})
 	}
 }
 

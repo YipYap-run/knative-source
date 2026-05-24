@@ -21,3 +21,9 @@ spec:
       apiVersion: eventing.knative.dev/v1
       kind: Broker
       name: default
+  # Optional: only forward CloudEvents whose type matches one of these globs.
+  # Omit the whole filter block to receive every event type.
+  filter:
+    types:
+      - run.yipyap.alert.*
+      - run.yipyap.monitor.state

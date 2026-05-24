@@ -26,7 +26,7 @@ import (
 type StreamClient struct {
 	baseURL    string
 	apiKey     string
-	filter     string
+	filters    []string
 	httpClient *http.Client
 }
 
@@ -46,7 +46,7 @@ func NewStreamClient(cfg *Config) *StreamClient {
 	return &StreamClient{
 		baseURL:    cfg.BaseURL,
 		apiKey:     cfg.APIKey,
-		filter:     cfg.EventFilter,
+		filters:    cfg.EventFilters,
 		httpClient: &http.Client{},
 	}
 }
@@ -109,9 +109,12 @@ func (s *StreamClient) streamOnce(ctx context.Context, emit func(context.Context
 		return false, fmt.Errorf("parse baseURL: %w", err)
 	}
 	u.Path = path.Join(u.Path, "/api/v1/cloudevents/stream")
-	if s.filter != "" {
+	if len(s.filters) > 0 {
 		q := u.Query()
-		q.Set("filter", s.filter)
+		// One filter param per type glob; the server OR-matches them.
+		for _, f := range s.filters {
+			q.Add("filter", f)
+		}
 		u.RawQuery = q.Encode()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
