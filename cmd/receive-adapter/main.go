@@ -33,7 +33,7 @@ func main() {
 		"sink", cfg.Sink,
 		"base_url", cfg.BaseURL,
 		"mode", cfg.Mode,
-		"event_filter", cfg.EventFilter,
+		"event_filters", cfg.EventFilters,
 	)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

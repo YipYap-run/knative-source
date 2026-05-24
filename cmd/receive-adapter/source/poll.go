@@ -28,7 +28,7 @@ import (
 type PollClient struct {
 	baseURL    string
 	apiKey     string
-	filter     string
+	filters    []string
 	interval   time.Duration
 	cursorPath string
 	httpClient *http.Client
@@ -45,7 +45,7 @@ func NewPollClient(cfg *Config) *PollClient {
 	return &PollClient{
 		baseURL:    cfg.BaseURL,
 		apiKey:     cfg.APIKey,
-		filter:     cfg.EventFilter,
+		filters:    cfg.EventFilters,
 		interval:   interval,
 		cursorPath: cfg.CursorPath,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
@@ -107,8 +107,9 @@ func (p *PollClient) fetch(ctx context.Context, cursor string) (string, []ce.Eve
 	}
 	u.Path = path.Join(u.Path, "/api/v1/cloudevents/poll")
 	q := u.Query()
-	if p.filter != "" {
-		q.Set("filter", p.filter)
+	// One filter param per type glob; the server OR-matches them.
+	for _, f := range p.filters {
+		q.Add("filter", f)
 	}
 	if cursor != "" {
 		q.Set("since", cursor)

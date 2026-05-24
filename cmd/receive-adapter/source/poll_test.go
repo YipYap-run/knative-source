@@ -14,14 +14,14 @@ import (
 )
 
 // newTestPollClient builds a PollClient pointed at the supplied baseURL with
-// sensible defaults for tests.
-func newTestPollClient(t *testing.T, baseURL, apiKey, filter string) *PollClient {
+// sensible defaults for tests. Pass any number of filter globs (or none).
+func newTestPollClient(t *testing.T, baseURL, apiKey string, filters ...string) *PollClient {
 	t.Helper()
 	cursorPath := filepath.Join(t.TempDir(), "cursor")
 	return &PollClient{
 		baseURL:    baseURL,
 		apiKey:     apiKey,
-		filter:     filter,
+		filters:    filters,
 		interval:   10 * time.Millisecond,
 		cursorPath: cursorPath,
 		httpClient: &http.Client{Timeout: 2 * time.Second},
@@ -59,7 +59,7 @@ func TestPollClient_Fetch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newTestPollClient(t, srv.URL, "api-key", "")
+	c := newTestPollClient(t, srv.URL, "api-key")
 	next, events, err := c.fetch(t.Context(), "")
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
@@ -81,7 +81,7 @@ func TestPollClient_Fetch(t *testing.T) {
 // TestPollClient_CursorPersistence: write + read cursor round-trip via the
 // on-disk cursor file.
 func TestPollClient_CursorPersistence(t *testing.T) {
-	c := newTestPollClient(t, "http://unused", "k", "")
+	c := newTestPollClient(t, "http://unused", "k")
 
 	// Missing file → empty cursor, no error.
 	got, err := c.readCursor()
@@ -125,7 +125,7 @@ func TestPollClient_HTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newTestPollClient(t, srv.URL, "k", "")
+	c := newTestPollClient(t, srv.URL, "k")
 	_, _, err := c.fetch(t.Context(), "")
 	if err == nil {
 		t.Fatalf("expected error on 500, got nil")
@@ -146,7 +146,7 @@ func TestPollClient_AuthHeaderAttached(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newTestPollClient(t, srv.URL, key, "")
+	c := newTestPollClient(t, srv.URL, key)
 	if _, _, err := c.fetch(t.Context(), ""); err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -156,12 +156,13 @@ func TestPollClient_AuthHeaderAttached(t *testing.T) {
 	}
 }
 
-// TestPollClient_FilterQueryParam: the supplied filter rides the URL's
-// ?filter= parameter.
+// TestPollClient_FilterQueryParam: a single filter rides the URL's
+// ?filter= parameter, alongside the since cursor.
 func TestPollClient_FilterQueryParam(t *testing.T) {
-	var gotFilter, gotSince string
+	var gotFilters []string
+	var gotSince string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotFilter = r.URL.Query().Get("filter")
+		gotFilters = r.URL.Query()["filter"]
 		gotSince = r.URL.Query().Get("since")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"events":      []ce.Event{},
@@ -174,11 +175,61 @@ func TestPollClient_FilterQueryParam(t *testing.T) {
 	if _, _, err := c.fetch(t.Context(), "prev-cursor"); err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
-	if gotFilter != "run.yipyap.alert.*" {
-		t.Fatalf("filter query: got %q, want %q", gotFilter, "run.yipyap.alert.*")
+	if len(gotFilters) != 1 || gotFilters[0] != "run.yipyap.alert.*" {
+		t.Fatalf("filter query: got %v, want [run.yipyap.alert.*]", gotFilters)
 	}
 	if gotSince != "prev-cursor" {
 		t.Fatalf("since query: got %q, want %q", gotSince, "prev-cursor")
+	}
+}
+
+// TestPollClient_MultiFilterQueryParam: multiple filters each emit their own
+// repeated ?filter= parameter (q.Add semantics), not a single joined value.
+func TestPollClient_MultiFilterQueryParam(t *testing.T) {
+	var gotFilters []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotFilters = r.URL.Query()["filter"]
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"events":      []ce.Event{},
+			"next_cursor": "",
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestPollClient(t, srv.URL, "k", "run.yipyap.alert.*", "run.yipyap.monitor.state")
+	if _, _, err := c.fetch(t.Context(), ""); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	want := []string{"run.yipyap.alert.*", "run.yipyap.monitor.state"}
+	if len(gotFilters) != len(want) {
+		t.Fatalf("filter query: got %v, want %v", gotFilters, want)
+	}
+	for i := range want {
+		if gotFilters[i] != want[i] {
+			t.Errorf("filter[%d]: got %q, want %q", i, gotFilters[i], want[i])
+		}
+	}
+}
+
+// TestPollClient_NoFilterNoParam: with no filters configured, the request
+// carries no ?filter= parameter at all.
+func TestPollClient_NoFilterNoParam(t *testing.T) {
+	var hadFilter bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, hadFilter = r.URL.Query()["filter"]
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"events":      []ce.Event{},
+			"next_cursor": "",
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestPollClient(t, srv.URL, "k")
+	if _, _, err := c.fetch(t.Context(), ""); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if hadFilter {
+		t.Fatalf("expected no filter query param, but one was present")
 	}
 }
 
@@ -187,7 +238,7 @@ func TestPollClient_FilterQueryParam(t *testing.T) {
 // at least verify the temp-file cleanup: no stray .tmp siblings remain after
 // a successful write.
 func TestPollClient_CursorAtomicWrite(t *testing.T) {
-	c := newTestPollClient(t, "http://unused", "k", "")
+	c := newTestPollClient(t, "http://unused", "k")
 	if err := c.writeCursor("abc"); err != nil {
 		t.Fatalf("writeCursor: %v", err)
 	}
