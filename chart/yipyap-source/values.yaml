@@ -31,10 +31,10 @@ controller:
   # RoleBinding pair for each entry.
 
   # Behaviour:
-  #   * Empty list (default) — apps/deployments + core/configmaps grants
+  #   * Empty list (default): apps/deployments + core/configmaps grants
   #     are emitted CLUSTER-WIDE on the ClusterRole (canonical Knative
   #     source pattern; reconcile against any namespace).
-  #   * Non-empty list — the cluster-wide grants are REMOVED from the
+  #   * Non-empty list: the cluster-wide grants are REMOVED from the
   #     ClusterRole and emitted ONLY as Role + RoleBinding pairs against
   #     the listed namespaces. Reconciles against any other namespace
   #     fail closed with RBAC-denied.
@@ -83,7 +83,7 @@ metrics:
   enabled: true
   port: 9090
   # NetworkPolicy ingress for the metrics endpoint.
-  # Default is DENY — when the labels map is empty, no ingress rule is
+  # Default is DENY: when the labels map is empty, no ingress rule is
   # rendered for the metrics port and scraping is blocked from every other
   # pod in the cluster. Operators who scrape with Prometheus must set:
 

@@ -43,11 +43,11 @@ import (
 //     reasonable timeout.
 //     (SourceStatusTestHelperWithComponentsTestRunner.)
 //   - Status.SinkURI is non-nil / non-empty.
-//     (SourceStatusTestHelper — "SinkURI populated" table row.)
+//     (SourceStatusTestHelper, "SinkURI populated" table row.)
 //   - Status.CloudEventAttributes advertises at least one event type.
-//     (SourceStatusTestHelper — "CloudEventAttributes non-empty" row.)
+//     (SourceStatusTestHelper, "CloudEventAttributes non-empty" row.)
 //   - The adapter Deployment exists and reports Available=True.
-//     (YipYapSource-specific — upstream sources without an adapter skip
+//     (YipYapSource-specific; upstream sources without an adapter skip
 //     this; ours has one, so we check it explicitly.)
 //   - Deleting the source cascades to the Deployment via owner references.
 //     (Lifecycle contract; not a named upstream helper but implicit in the
@@ -148,7 +148,7 @@ func TestYipYapSource_Lifecycle(t *testing.T) {
 		}
 		// Soft check: every advertised attribute should have a non-empty type.
 		// The upstream helper requires only that the list be non-empty, so we
-		// treat a bad row as a warning rather than a failure — filed inline.
+		// treat a bad row as a warning rather than a failure (filed inline).
 		for i, a := range got.Status.CloudEventAttributes {
 			if strings.TrimSpace(a.Type) == "" {
 				t.Errorf("CloudEventAttributes[%d].Type is empty", i)

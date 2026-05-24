@@ -3,7 +3,7 @@
 
 # Ingress: controller is never called by external clients (no Service exposed
 # outside metrics). Metrics scraping from the observability stack is allowed
-# ONLY when the operator has labeled their monitoring namespace explicitly —
+# ONLY when the operator has labeled their monitoring namespace explicitly;
 # see metrics.networkPolicy.ingressFromNamespaceLabels. Default-deny: if no
 # selector is configured, no metrics ingress rule is rendered, so scraping
 # is blocked from every other pod in the cluster.
@@ -59,11 +59,11 @@ spec:
 # Ingress:
 #   * kube-apiserver calls the webhook admission endpoint on :8443. The
 #     apiserver IP is not a stable NetworkPolicy selector across cluster
-#     topologies, so this single rule does allow `from: []` (any peer) —
+#     topologies, so this single rule does allow `from: []` (any peer),
 #     scoped to the admission port. Operators who can pin their apiserver
 #     to a known IP / namespace should override this template.
 #   * Metrics scraping is gated on metrics.networkPolicy.ingressFromNamespaceLabels;
-#     no rule is rendered when the labels are empty (default-deny — same
+#     no rule is rendered when the labels are empty (default-deny, same
 #     posture applied to the controller).
 
 # Egress: kube-apiserver + DNS (the webhook patches its own CA bundle into

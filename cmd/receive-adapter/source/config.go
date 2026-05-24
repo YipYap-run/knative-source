@@ -36,11 +36,11 @@ type ceOverridesEnvelope struct {
 // Injecting getenv keeps the parser pure so tests do not have to mutate process env.
 func LoadConfig(getenv func(string) string) (*Config, error) {
 	cfg := &Config{
-		Sink:         getenv("K_SINK"),
-		APIKey:       getenv("YIPYAP_API_KEY"),
-		BaseURL:      defaultStr(getenv("YIPYAP_BASE_URL"), "https://console.yipyap.run"),
-		EventFilter:  getenv("YIPYAP_EVENT_FILTER"),
-		Mode:         getenv("YIPYAP_MODE"),
+		Sink:           getenv("K_SINK"),
+		APIKey:         getenv("YIPYAP_API_KEY"),
+		BaseURL:        defaultStr(getenv("YIPYAP_BASE_URL"), "https://console.yipyap.run"),
+		EventFilter:    getenv("YIPYAP_EVENT_FILTER"),
+		Mode:           getenv("YIPYAP_MODE"),
 		CursorPath:     defaultStr(getenv("YIPYAP_CURSOR_PATH"), "/var/run/yipyap/cursor"),
 		HealthAddr:     defaultStr(getenv("YIPYAP_HEALTH_ADDR"), ":8080"),
 		CEOverrides:    map[string]string{},
