@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -138,29 +139,38 @@ func TestCRD_ListByLabel(t *testing.T) {
 	}
 }
 
-// TestCRD_AcceptsAnyModeAtAPITier documents the separation of concerns
-// between the API-server's schema validation and our admission webhook. The
-// CRD uses x-kubernetes-preserve-unknown-fields, so the API server accepts
-// any Mode string; the webhook (not installed in this envtest) is the one
-// that rejects bogus values. This test pins that contract: if we ever add
-// structural-schema enum validation to the CRD itself, this test must fail
-// loudly so we revisit the webhook's responsibility.
-func TestCRD_AcceptsAnyModeAtAPITier(t *testing.T) {
+// TestCRD_ModeEnum checks that the apiserver enforces the mode enum from the
+// shipped CRD on its own, so a bad mode is rejected even when the admission
+// webhook (not installed here) is down or set to failurePolicy=Ignore.
+func TestCRD_ModeEnum(t *testing.T) {
 	ns := "crd-mode"
 	newNamespace(t, ns)
 
-	src := &sourcesv1alpha1.YipYapSource{
-		ObjectMeta: metav1.ObjectMeta{Name: "bogus-mode", Namespace: ns},
-		Spec: sourcesv1alpha1.YipYapSourceSpec{
-			APIKeyRef: sourcesv1alpha1.APIKeyReference{Name: "my-secret"},
-			Mode:      sourcesv1alpha1.YipYapSourceMode("not-a-real-mode"),
-			SourceSpec: duckv1.SourceSpec{
-				Sink: duckv1.Destination{URI: mustParseURL(t, "http://example.com/sink")},
+	newSource := func(name string, mode sourcesv1alpha1.YipYapSourceMode) *sourcesv1alpha1.YipYapSource {
+		return &sourcesv1alpha1.YipYapSource{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Spec: sourcesv1alpha1.YipYapSourceSpec{
+				APIKeyRef: sourcesv1alpha1.APIKeyReference{Name: "my-secret"},
+				Mode:      mode,
+				SourceSpec: duckv1.SourceSpec{
+					Sink: duckv1.Destination{URI: mustParseURL(t, "http://example.com/sink")},
+				},
 			},
-		},
+		}
 	}
-	if err := testClient.Create(testCtx, src); err != nil {
-		t.Fatalf("API server rejected bogus mode at CRD tier; was schema tightened? err: %v", err)
+
+	err := testClient.Create(testCtx, newSource("bogus-mode", "not-a-real-mode"))
+	if err == nil {
+		t.Fatal("API server accepted an unknown mode; the CRD mode enum is missing")
+	}
+	if !apierrors.IsInvalid(err) || !strings.Contains(err.Error(), "spec.mode") {
+		t.Fatalf("unknown mode: got %v, want an Invalid error on spec.mode", err)
+	}
+
+	for _, mode := range []sourcesv1alpha1.YipYapSourceMode{"auto", "poll", "stream"} {
+		if err := testClient.Create(testCtx, newSource("mode-"+string(mode), mode)); err != nil {
+			t.Errorf("mode %q rejected: %v", mode, err)
+		}
 	}
 }
 

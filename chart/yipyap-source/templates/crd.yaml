@@ -10,7 +10,16 @@ metadata:
   annotations:
     registry.knative.dev/eventTypes: |
       [
-        { "type": "dev.yipyap.source" }
+        { "type": "run.yipyap.alert.fired.v1" },
+        { "type": "run.yipyap.alert.acknowledged.v1" },
+        { "type": "run.yipyap.alert.resolved.v1" },
+        { "type": "run.yipyap.alert.escalated.v1" },
+        { "type": "run.yipyap.monitor.up.v1" },
+        { "type": "run.yipyap.monitor.down.v1" },
+        { "type": "run.yipyap.monitor.degraded.v1" },
+        { "type": "run.yipyap.monitor.heartbeat_missed.v1" },
+        { "type": "run.yipyap.maintenance.started.v1" },
+        { "type": "run.yipyap.maintenance.ended.v1" }
       ]
 spec:
   group: sources.yipyap.run
@@ -34,13 +43,15 @@ spec:
         status: {}
       schema:
         openAPIV3Schema:
-          # Static schema floor. Unknown fields are
-          # rejected at apiserver-side validation by Kubernetes' structural-
-          # schema enforcement: when `properties` is specified at any level,
-          # any key not in the list is rejected automatically. Explicit
-          # `additionalProperties: false` is FORBIDDEN by structural-schema
-          # rules (and forbidden at root when the status subresource is
-          # enabled), so we rely on the implicit strict default.
+          # Static schema floor, enforced by the apiserver even when the
+          # admission webhook is unavailable or set to failurePolicy=Ignore.
+          #
+          # Do not add `additionalProperties: false` next to `properties`:
+          # the apiserver rejects the CRD because the two are mutually
+          # exclusive. Listing `properties` already makes the apiserver drop
+          # unknown fields, or reject them under strict field validation
+          # (the kubectl default). test/crd checks this file against
+          # config/300-yipyapsource.yaml and the apiserver's CRD rules.
 
           # `required` is also illegal at root when status subresource is
           # enabled (apiserver injects status, which root-required would
@@ -78,13 +89,20 @@ spec:
                 baseURL:
                   type: string
                   maxLength: 2048
-                  # Require an http(s) scheme; permissive on host since the
-                  # webhook performs SSRF + private-target validation.
-                  pattern: '^https?://[^\s]+$'
+                  # https only. The admission webhook also requires the host
+                  # to be on webhook.allowedBaseURLHosts and rejects user
+                  # info; the controller re-checks before deploying.
+                  pattern: '^https://[^\s]+$'
                 mode:
                   type: string
                   enum: ["", auto, poll, stream]
                 serviceAccountName:
+                  description: >-
+                    ServiceAccount the adapter pod runs as. When unset, the
+                    pod uses the namespace's default ServiceAccount. No API
+                    token is mounted. For a sink with an OIDC audience the
+                    pod runs as a generated per-source ServiceAccount and
+                    takes only this account's imagePullSecrets.
                   type: string
                   maxLength: 253
                   pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
@@ -107,7 +125,7 @@ spec:
                         maxLength: 256
                     severities:
                       type: array
-                      maxItems: 8
+                      maxItems: 3
                       items:
                         type: string
                         enum: [info, warning, critical]
@@ -132,6 +150,10 @@ spec:
         - name: Reason
           type: string
           jsonPath: ".status.conditions[?(@.type=='Ready')].reason"
+        - name: Message
+          type: string
+          priority: 1
+          jsonPath: ".status.conditions[?(@.type=='Ready')].message"
         - name: Sink
           type: string
           jsonPath: .status.sinkUri

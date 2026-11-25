@@ -5,49 +5,59 @@ metadata:
   labels:
     {{- include "yipyap-source.labels" . | nindent 4 }}
 rules:
-  # Namespaced reconcile-target verbs: when controller.scopedNamespaces is
-  # empty, grant cluster-wide on Deployments + ConfigMaps so the controller
-  # can reconcile receive-adapter Pods + read observability ConfigMaps in
-  # any namespace (canonical Knative-source posture). When scopedNamespaces
-  # is set, these grants live ONLY in the per-namespace Roles emitted by
-  # scoped-roles.yaml, leaving the ClusterRole free of cluster-wide
-  # apps/deployments and core/configmaps verbs
-  #  previously additive Roles still left the ClusterRole
-  # cluster-wide; now they're an exclusive narrowing).
-  {{- if not .Values.controller.scopedNamespaces }}
+  # Adapter Deployments. The controller's Deployment informer lists and
+  # watches every namespace, so get/list/watch stay cluster-wide in both
+  # modes. With controller.scopedNamespaces empty (default) the write verbs
+  # are cluster-wide too. With it set, the writes live only in the
+  # per-namespace Roles from scoped-roles.yaml.
+  #
+  # No configmaps rule: the controller reads only its own config ConfigMaps,
+  # in the release namespace (controller-role.yaml).
+  {{- if .Values.controller.scopedNamespaces }}
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+  {{- else }}
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "list", "watch"]
-  {{- end }}
 
-  - apiGroups: ["rbac.authorization.k8s.io"]
-    resources: ["clusterroles"]
+  # Adapter pods: list only, to find a source's adapter pod and read its
+  # status endpoint for the Connected condition. No get, watch or writes.
+  # This is a direct per-namespace call, not an informer, so scoping moves
+  # it into the per-namespace Roles.
+  - apiGroups: [""]
+    resources: ["pods"]
     verbs: ["list"]
 
+  # Per-source OIDC ServiceAccounts, made only for a sink with an OIDC
+  # audience. Get and create only: the controller never updates, deletes
+  # (owner references let GC do that) or mints tokens for them. Direct
+  # per-namespace calls, so scoping moves this into the per-namespace Roles.
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "create"]
+  {{- end }}
+
+  # The event recorder only creates events and patches the count on repeats.
   - apiGroups: [""]
     resources: ["events"]
-    verbs: &everything ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["create", "update", "patch"]
 
   - apiGroups: ["sources.yipyap.run"]
     resources: ["yipyapsources"]
-    verbs: *everything
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
   - apiGroups: ["sources.yipyap.run"]
     resources: ["yipyapsources/status", "yipyapsources/finalizers"]
     verbs: ["get", "update", "patch"]
 
-  # Leader election
-  - apiGroups: ["coordination.k8s.io"]
-    resources: ["leases"]
-    verbs: *everything
+# Leader-election leases and the controller's own config ConfigMaps live in
+# the release namespace only; see controller-role.yaml.
 
-# Note on Secrets: the controller SA is NEVER granted
-# secret read at any level. The receive-adapter Pod kubelet-dereferences
-# the API key Secret via SecretKeyRef in the YipYapSource's own namespace.
-# Adding a Secret rule here (at any scope) would be a posture regression.
+# No secrets rule at any scope. The controller never reads Secret values:
+# the receive-adapter Pod resolves the API key Secret in its own namespace
+# through SecretKeyRef. Do not add a Secret rule here.
 
 ---
 # Aggregated source-observer role: grants read-only access to YipYapSources
@@ -60,6 +70,6 @@ metadata:
     {{- include "yipyap-source.labels" . | nindent 4 }}
     duck.knative.dev/source: "true"
 rules:
-  - apiGroups: ["sources.eventing.knative.dev"]
+  - apiGroups: ["sources.yipyap.run"]
     resources: ["yipyapsources"]
     verbs: ["get", "list", "watch"]

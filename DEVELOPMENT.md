@@ -29,6 +29,14 @@ go test ./...
 ./hack/verify-codegen.sh
 ```
 
+## Receive adapter delivery
+
+The adapter under `cmd/receive-adapter` retries each event in place and
+confirms it to the YipYap server only after the sink accepts or permanently
+rejects it. The wire contract (headers, `since` cursor, ack endpoint,
+shutdown drain) is in [docs/delivery.md](./docs/delivery.md). Change the
+adapter and that page together.
+
 ## Image builds
 
 Controller and webhook images are published via `ko` to

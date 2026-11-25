@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package envtest exercises the YipYapSource CRD against a real kube-apiserver
+// Package envtest exercises the shipped YipYapSource CRD against a real kube-apiserver
 // + etcd via sigs.k8s.io/controller-runtime/pkg/envtest. It does NOT run the
 // reconciler or the admission webhook; those are covered by the table-driven
 // tests in pkg/reconciler/yipyapsource and the webhook package. Here we verify
@@ -30,10 +30,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -42,6 +42,7 @@ import (
 	ctrlenvtest "sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	sourcesv1alpha1 "github.com/YipYap-run/knative-source/pkg/apis/sources/v1alpha1"
+	"github.com/YipYap-run/knative-source/test/crd"
 )
 
 var (
@@ -56,11 +57,15 @@ func TestMain(m *testing.M) {
 	// codec YipYapSource objects.
 	utilruntime.Must(sourcesv1alpha1.AddToScheme(scheme.Scheme))
 
+	// Install the CRD that ships in the Helm chart, so these tests cover the
+	// schema users get. test/crd checks that config/ carries the same schema.
+	shipped, err := crd.Chart()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load chart CRD: %v\n", err)
+		os.Exit(1)
+	}
 	testEnv = &ctrlenvtest.Environment{
-		CRDDirectoryPaths: []string{
-			filepath.Join("testdata", "crds"),
-		},
-		ErrorIfCRDPathMissing: true,
+		CRDs: []*apiextensionsv1.CustomResourceDefinition{shipped},
 	}
 
 	cfg, err := testEnv.Start()

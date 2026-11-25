@@ -1,4 +1,22 @@
 {{- if .Values.namespace.create }}
+{{- /*
+The chart never creates the release namespace. Helm stores the release
+there, so it must exist before any chart resource is created. helm install
+renders the chart first, then creates the namespace for --create-namespace,
+then creates the rendered resources; a Namespace in the chart for the same
+name fails that last step with "already exists". Use --create-namespace (or
+the GitOps tool's equivalent) for the release namespace.
+
+A different namespace.name is created by the chart, unless it already
+exists and this release does not own it (Helm refuses to adopt it). A
+Namespace this release already owns keeps rendering on upgrade, so Helm
+never deletes it by dropping it from the manifest.
+*/}}
+{{- $existing := lookup "v1" "Namespace" "" .Values.namespace.name }}
+{{- $annotations := dig "metadata" "annotations" dict $existing }}
+{{- $owned := and (eq (get $annotations "meta.helm.sh/release-name") .Release.Name) (eq (get $annotations "meta.helm.sh/release-namespace") .Release.Namespace) }}
+{{- $isReleaseNamespace := eq .Values.namespace.name .Release.Namespace }}
+{{- if or $owned (and (not $existing) (not $isReleaseNamespace)) }}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -6,4 +24,5 @@ metadata:
   labels:
     {{- include "yipyap-source.labels" . | nindent 4 }}
     istio-injection: enabled
+{{- end }}
 {{- end }}

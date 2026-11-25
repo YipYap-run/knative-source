@@ -1,3 +1,19 @@
+/*
+Copyright 2026 The YipYap Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package source
 
 import (
@@ -179,7 +195,7 @@ func TestLoadConfig_PollIntervalInvalid(t *testing.T) {
 }
 
 func TestLoadConfig_ModeValidation(t *testing.T) {
-	for _, mode := range []string{"", "poll", "stream"} {
+	for _, mode := range []string{"", "auto", "poll", "stream"} {
 		cfg, err := LoadConfig(fakeEnv(map[string]string{
 			"K_SINK":         "http://sink.example/",
 			"YIPYAP_API_KEY": "secret",
@@ -204,5 +220,88 @@ func TestLoadConfig_ModeValidation(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "YIPYAP_MODE") {
 		t.Errorf("error should mention YIPYAP_MODE, got %v", err)
+	}
+}
+
+func TestLoadConfig_ModeIsNormalized(t *testing.T) {
+	// ResolveMode trims and lowercases the mode, so LoadConfig must accept
+	// the same spellings instead of exiting at startup.
+	for raw, want := range map[string]string{" Auto ": "auto", "POLL": "poll", "Stream\n": "stream"} {
+		cfg, err := LoadConfig(fakeEnv(map[string]string{
+			"K_SINK":         "http://sink.example/",
+			"YIPYAP_API_KEY": "secret",
+			"YIPYAP_MODE":    raw,
+		}))
+		if err != nil {
+			t.Errorf("mode %q: unexpected error: %v", raw, err)
+			continue
+		}
+		if cfg.Mode != want {
+			t.Errorf("mode %q: Mode = %q, want %q", raw, cfg.Mode, want)
+		}
+	}
+}
+
+func TestLoadConfig_PollIntervalMustBePositive(t *testing.T) {
+	for _, raw := range []string{"0", "0s", "-1s", "-5m"} {
+		t.Run(raw, func(t *testing.T) {
+			_, err := LoadConfig(fakeEnv(map[string]string{
+				"K_SINK":               "http://sink.example/",
+				"YIPYAP_API_KEY":       "secret",
+				"YIPYAP_POLL_INTERVAL": raw,
+			}))
+			if err == nil {
+				t.Fatalf("YIPYAP_POLL_INTERVAL=%q: expected error, got nil", raw)
+			}
+			if !strings.Contains(err.Error(), "positive") {
+				t.Errorf("error should say the interval must be positive, got %v", err)
+			}
+		})
+	}
+}
+
+func TestSafePollInterval(t *testing.T) {
+	cases := map[time.Duration]time.Duration{
+		0:                DefaultPollInterval,
+		-1:               DefaultPollInterval,
+		-time.Minute:     DefaultPollInterval,
+		time.Millisecond: time.Millisecond,
+		30 * time.Second: 30 * time.Second,
+	}
+	for in, want := range cases {
+		if got := safePollInterval(in); got != want {
+			t.Errorf("safePollInterval(%v) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+func TestLoadConfig_SourceIDAndShutdownGrace(t *testing.T) {
+	base := map[string]string{"K_SINK": "http://sink/", "YIPYAP_API_KEY": "k"}
+
+	cfg, err := LoadConfig(fakeEnv(base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SourceID != "" || cfg.ShutdownGrace != DefaultShutdownGrace {
+		t.Errorf("defaults: SourceID=%q ShutdownGrace=%v, want empty and %v", cfg.SourceID, cfg.ShutdownGrace, DefaultShutdownGrace)
+	}
+
+	env := map[string]string{"YIPYAP_SOURCE_ID": " uid-1 ", "YIPYAP_SHUTDOWN_GRACE": "10s"}
+	for k, v := range base {
+		env[k] = v
+	}
+	cfg, err = LoadConfig(fakeEnv(env))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SourceID != "uid-1" || cfg.ShutdownGrace != 10*time.Second {
+		t.Errorf("SourceID=%q ShutdownGrace=%v, want uid-1 and 10s", cfg.SourceID, cfg.ShutdownGrace)
+	}
+
+	for _, bad := range []string{"soon", "-1s", "26s", "5m"} {
+		env["YIPYAP_SHUTDOWN_GRACE"] = bad
+		if _, err := LoadConfig(fakeEnv(env)); err == nil || !strings.Contains(err.Error(), "YIPYAP_SHUTDOWN_GRACE") {
+			t.Errorf("YIPYAP_SHUTDOWN_GRACE=%q: err = %v, want a YIPYAP_SHUTDOWN_GRACE error", bad, err)
+		}
 	}
 }

@@ -37,6 +37,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,11 +65,40 @@ var (
 
 // Defaults. Overridable via env vars so CI can pin them.
 const (
-	envKubeconfig     = "KUBECONFIG"
-	envSkipReason     = "conformance tests require a live cluster with the YipYapSource controller installed; set KUBECONFIG"
-	defaultAPIKey     = "dummy-api-key-for-conformance"
-	defaultAdapterImg = "ghcr.io/yipyap-run/knative-source:latest"
+	envKubeconfig = "KUBECONFIG"
+	envSkipReason = "conformance tests require a live cluster with the YipYapSource controller installed; set KUBECONFIG"
+	defaultAPIKey = "dummy-api-key-for-conformance"
+
+	// envBaseURL points every source at a stand-in YipYap API, such as the
+	// smoke stub (test/smoke/stub), so CI never calls the real console.
+	// Unset means the default baseURL.
+	envBaseURL = "YIPYAP_CONFORMANCE_BASE_URL"
+	// envAPIKeyFile names a file holding the API key the stand-in accepts.
+	// Unset means a placeholder key.
+	envAPIKeyFile = "YIPYAP_CONFORMANCE_API_KEY_FILE"
 )
+
+// conformanceBaseURL returns the base URL to set on every source, or "" for
+// the default.
+func conformanceBaseURL() string { return os.Getenv(envBaseURL) }
+
+// conformanceAPIKey returns the key from envAPIKeyFile, or the placeholder.
+func conformanceAPIKey(t *testing.T) string {
+	t.Helper()
+	path := os.Getenv(envAPIKeyFile)
+	if path == "" {
+		return defaultAPIKey
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", envAPIKeyFile, err)
+	}
+	key := strings.TrimSpace(string(b))
+	if key == "" {
+		t.Fatalf("%s names an empty file", envAPIKeyFile)
+	}
+	return key
+}
 
 // TestMain discovers the cluster. When no KUBECONFIG is set we skip the whole
 // suite rather than fail; that keeps `go test -tags conformance ./...` a
@@ -146,14 +176,14 @@ func newNamespace(t *testing.T, name string) *corev1.Namespace {
 }
 
 // newAPIKeySecret creates the Secret a YipYapSource references through
-// .spec.apiKeyRef. Conformance doesn't exercise a real yipyap backend, so a
-// placeholder value is fine.
+// .spec.apiKeyRef. The key comes from envAPIKeyFile when set (the stub's
+// key in CI), otherwise a placeholder.
 func newAPIKeySecret(t *testing.T, ns, name string) *corev1.Secret {
 	t.Helper()
 	sec := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
 		StringData: map[string]string{
-			"api-key": defaultAPIKey,
+			"api-key": conformanceAPIKey(t),
 		},
 	}
 	if err := testClient.Create(testCtx, sec); err != nil {

@@ -1,0 +1,262 @@
+# CI: runs on every pull request and push to main, and from release.yaml
+# (workflow_call) before any image or chart is published.
+
+# Jobs:
+#   go        build, vet (including the envtest and conformance tags) and
+#             unit tests, with helm on PATH so the chart tests run
+#   envtest   the envtest suite against a real kube-apiserver and etcd
+#   lint      golangci-lint
+#   codegen   hack/verify-codegen.sh
+#   chart     helm lint and helm template, the fail-fast check for a
+#             missing apiServerCIDRs, ko resolve of config/, shellcheck,
+#             and the writing style check (hack/verify-text.sh)
+#   smoke     kind cluster with Calico: build images with ko, install the
+#             chart, apply example.yaml against a stub YipYap API, and wait
+#             for the source to be Ready and its adapter Available
+
+# Security note: no run step interpolates event payload fields (PR titles,
+# branch names, commit messages). The only input is `ref`, passed to
+# actions/checkout as a with: value, never to a shell.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to check out. Empty means the triggering ref."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  # Keep in step with release.yaml.
+  HELM_VERSION: v3.15.0
+  KO_VERSION: v0.18.0
+  KIND_VERSION: v0.31.0
+  GOLANGCI_LINT_VERSION: v2.15.0
+
+jobs:
+  go:
+    name: Build, vet and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: |
+          set -euo pipefail
+          go vet ./...
+          # The envtest and conformance suites are behind build tags; vet
+          # them too so they keep compiling.
+          go vet -tags envtest,conformance ./test/...
+
+      - name: gofmt
+        run: |
+          set -euo pipefail
+          unformatted=$(git ls-files '*.go' | grep -v -e '^vendor/' -e '^third_party/' | xargs gofmt -l)
+          if [ -n "$unformatted" ]; then
+            echo "::error::these files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go test
+        # CI=true (set by Actions) makes the chart tests fail instead of
+        # skipping when helm is missing.
+        run: go test -count=1 ./...
+
+  envtest:
+    name: envtest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run the envtest suite
+        # The Makefile pins setup-envtest and the Kubernetes version.
+        run: make test-envtest
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+
+  codegen:
+    name: Verify codegen
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: hack/verify-codegen.sh
+        run: ./hack/verify-codegen.sh
+
+      - name: Check the tree is clean
+        # verify-codegen.sh restores pkg/, vendor/ and go.sum, but not
+        # go.mod. A change there means go.mod is out of date.
+        run: git diff --exit-code
+
+  chart:
+    name: Chart, manifests and scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: helm lint
+        run: helm lint --strict chart/yipyap-source -f chart/yipyap-source/ci/apiserver-cidrs-values.yaml
+
+      - name: helm template
+        run: |
+          set -euo pipefail
+          helm template yipyap-source chart/yipyap-source \
+            --namespace yipyap-sources \
+            -f chart/yipyap-source/ci/apiserver-cidrs-values.yaml > /dev/null
+
+      - name: helm template fails fast without apiServerCIDRs
+        run: |
+          set -uo pipefail
+          if out=$(helm template yipyap-source chart/yipyap-source 2>&1); then
+            echo "::error::helm template succeeded without networkPolicy.apiServerCIDRs"
+            exit 1
+          fi
+          if ! grep -q "networkPolicy.apiServerCIDRs is required" <<< "$out"; then
+            echo "::error::helm template failed without the apiServerCIDRs message:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Install ko
+        run: go install "github.com/google/ko@${KO_VERSION}"
+
+      - name: ko resolve config/
+        # Builds every ko:// image in config/ without pushing, so a broken
+        # import path or main package fails here instead of at release.
+        env:
+          KO_DOCKER_REPO: ko.invalid/knative-source
+          CGO_ENABLED: "0"
+        run: ko resolve -f config/ --push=false --sbom=none > /dev/null
+
+      - name: shellcheck
+        run: shellcheck hack/apiserver-cidrs-values.sh hack/set-image-digests.sh hack/release-tag-absent.sh hack/bump-base-image.sh hack/verify-text.sh hack/verify-text-test.sh test/smoke/smoke.sh
+
+      - name: Writing style
+        # Dashes, planning markers, license header owners and a short word
+        # list across tracked first-party files. See CONTRIBUTING.md.
+        run: |
+          hack/verify-text-test.sh
+          hack/verify-text.sh
+
+  smoke:
+    name: kind smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SMOKE_CLUSTER: yipyap-smoke
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install ko and kind
+        run: |
+          set -euo pipefail
+          go install "github.com/google/ko@${KO_VERSION}"
+          go install "sigs.k8s.io/kind@${KIND_VERSION}"
+
+      - name: Create kind cluster with Calico
+        run: test/smoke/smoke.sh cluster
+
+      - name: Build and load images
+        run: test/smoke/smoke.sh images
+
+      - name: Start the stub YipYap API
+        run: test/smoke/smoke.sh stub
+
+      - name: Install the chart
+        run: test/smoke/smoke.sh chart
+
+      - name: Apply example.yaml
+        run: test/smoke/smoke.sh source
+
+      - name: Wait for Ready and Available
+        run: test/smoke/smoke.sh verify
+
+      - name: Dump cluster state
+        if: failure()
+        run: test/smoke/smoke.sh dump

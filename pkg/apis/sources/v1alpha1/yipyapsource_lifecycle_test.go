@@ -29,8 +29,10 @@ func TestYipYapSourceStatus_InitializeConditions(t *testing.T) {
 
 	for _, ct := range []apis.ConditionType{
 		YipYapSourceConditionReady,
+		YipYapSourceConditionBaseURLAllowed,
 		YipYapSourceConditionSinkProvided,
 		YipYapSourceConditionDeployed,
+		YipYapSourceConditionConnected,
 	} {
 		got := s.GetCondition(ct)
 		if got == nil {
@@ -96,6 +98,7 @@ func TestYipYapSourceStatus_MarkNoSink_FalseWithReason(t *testing.T) {
 func TestYipYapSourceStatus_MarkDeployed_SetsReadyOnce_SinkProvided(t *testing.T) {
 	s := &YipYapSourceStatus{}
 	s.InitializeConditions()
+	s.MarkBaseURLAllowed()
 
 	// Only deployed; sink still unknown.
 	s.MarkDeployed()
@@ -114,9 +117,13 @@ func TestYipYapSourceStatus_MarkDeployed_SetsReadyOnce_SinkProvided(t *testing.T
 	// Now provide sink too.
 	uri, _ := apis.ParseURL("http://sink.example/")
 	s.MarkSink(uri)
+	if s.IsReady() {
+		t.Errorf("IsReady() = true, expected false while Connected is Unknown")
+	}
 
+	s.MarkConnected()
 	if !s.IsReady() {
-		t.Errorf("IsReady() = false, expected true after both conditions are True")
+		t.Errorf("IsReady() = false, expected true after all conditions are True")
 	}
 	ready = s.GetCondition(YipYapSourceConditionReady)
 	if ready.Status != corev1.ConditionTrue {
@@ -175,8 +182,86 @@ func TestYipYapSourceStatus_FullLifecycle(t *testing.T) {
 	}
 
 	s.MarkDeployed()
+	if s.IsReady() {
+		t.Errorf("IsReady() true before the base URL was checked, expected false")
+	}
+
+	s.MarkBaseURLAllowed()
+	if s.IsReady() {
+		t.Errorf("IsReady() true before the adapter reported its connection, expected false")
+	}
+
+	s.MarkConnected()
 	if !s.IsReady() {
-		t.Errorf("IsReady() false after MarkSink + MarkDeployed, expected true")
+		t.Errorf("IsReady() false after MarkBaseURLAllowed + MarkSink + MarkDeployed + MarkConnected, expected true")
+	}
+}
+
+func TestYipYapSourceStatus_Connected(t *testing.T) {
+	ready := func() *YipYapSourceStatus {
+		s := &YipYapSourceStatus{}
+		s.InitializeConditions()
+		uri, _ := apis.ParseURL("http://broker.example/")
+		s.MarkBaseURLAllowed()
+		s.MarkSink(uri)
+		s.MarkDeployed()
+		s.MarkConnected()
+		return s
+	}
+
+	s := ready()
+	if !s.IsReady() {
+		t.Fatal("IsReady() false with every condition True")
+	}
+
+	// A rejected key puts its reason and message on Ready.
+	s.MarkNotConnected("APIKeyRejected", "API key rejected (401)")
+	got := s.GetCondition(YipYapSourceConditionReady)
+	if got.Status != corev1.ConditionFalse || got.Reason != "APIKeyRejected" || got.Message != "API key rejected (401)" {
+		t.Errorf("Ready = %+v, want False/APIKeyRejected/API key rejected (401)", got)
+	}
+	if c := s.GetCondition(YipYapSourceConditionConnected); c.Status != corev1.ConditionFalse {
+		t.Errorf("Connected = %+v, want False", c)
+	}
+
+	// Connected marked after a failed Deployed wins the Ready reason, which
+	// is the order the reconciler uses.
+	s.MarkNotDeployed("MinimumReplicasUnavailable", "Deployment does not have minimum availability.")
+	s.MarkNotConnected("APIForbidden", "API key forbidden (403)")
+	got = s.GetCondition(YipYapSourceConditionReady)
+	if got.Reason != "APIForbidden" || got.Message != "API key forbidden (403)" {
+		t.Errorf("Ready = %+v, want APIForbidden", got)
+	}
+
+	// Recovery flips Ready back once the Deployment is available again.
+	s.MarkDeployed()
+	s.MarkConnected()
+	if !s.IsReady() {
+		t.Errorf("IsReady() false after recovery: %+v", s.GetCondition(YipYapSourceConditionReady))
+	}
+
+	s = ready()
+	s.MarkConnecting("AdapterStarting", "waiting for the adapter pod to start")
+	got = s.GetCondition(YipYapSourceConditionReady)
+	if got.Status != corev1.ConditionUnknown || got.Reason != "AdapterStarting" {
+		t.Errorf("Ready = %+v, want Unknown/AdapterStarting", got)
+	}
+}
+
+func TestYipYapSourceStatus_MarkBaseURLNotAllowed(t *testing.T) {
+	s := &YipYapSourceStatus{}
+	s.InitializeConditions()
+	uri, _ := apis.ParseURL("http://broker.example/")
+	s.MarkSink(uri)
+	s.MarkDeployed()
+	s.MarkBaseURLNotAllowed("BaseURLNotAllowed", "spec.baseURL %s", "must use https")
+
+	if s.IsReady() {
+		t.Fatal("IsReady() true with a rejected base URL")
+	}
+	ready := s.GetCondition(YipYapSourceConditionReady)
+	if ready.Status != corev1.ConditionFalse || ready.Reason != "BaseURLNotAllowed" || ready.Message != "spec.baseURL must use https" {
+		t.Errorf("Ready = %+v, want False/BaseURLNotAllowed", ready)
 	}
 }
 

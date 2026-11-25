@@ -18,6 +18,7 @@ package yipyapsource
 
 import (
 	"context"
+	"os"
 
 	"github.com/kelseyhightower/envconfig"
 	"go.uber.org/zap"
@@ -32,6 +33,7 @@ import (
 	"knative.dev/pkg/resolver"
 
 	"github.com/YipYap-run/knative-source/pkg/apis/sources/v1alpha1"
+	"github.com/YipYap-run/knative-source/pkg/baseurl"
 	yipyapsourceinformer "github.com/YipYap-run/knative-source/pkg/client/injection/informers/sources/v1alpha1/yipyapsource"
 	yipyapsourcereconciler "github.com/YipYap-run/knative-source/pkg/client/injection/reconciler/sources/v1alpha1/yipyapsource"
 )
@@ -54,6 +56,10 @@ func NewController(
 	if err := envconfig.Process("", env); err != nil {
 		logging.FromContext(ctx).Panicw("cannot process YIPYAP_SOURCE_RA_IMAGE", zap.Error(err))
 	}
+	policy, err := baseurl.FromEnv(os.LookupEnv)
+	if err != nil {
+		logging.FromContext(ctx).Panicw("invalid base URL allowlist", zap.Error(err))
+	}
 
 	deploymentInformer := deploymentinformer.Get(ctx)
 	yipyapSourceInformer := yipyapsourceinformer.Get(ctx)
@@ -62,8 +68,11 @@ func NewController(
 		kubeClientSet:    kubeclient.Get(ctx),
 		deploymentLister: deploymentInformer.Lister(),
 		adapterImage:     env.Image,
+		baseURLPolicy:    policy,
+		adapterObserver:  newPodObserver(kubeclient.Get(ctx)),
 	}
 	impl := yipyapsourcereconciler.NewImpl(ctx, r)
+	r.enqueueAfter = impl.EnqueueAfter
 
 	// URIResolver is driven by the controller's tracker so that changes to
 	// Channel/Broker/etc. sink targets re-enqueue the owning YipYapSource.

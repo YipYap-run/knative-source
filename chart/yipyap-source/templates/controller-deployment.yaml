@@ -72,6 +72,8 @@ spec:
               value: knative.dev/sources
             - name: YIPYAP_SOURCE_RA_IMAGE
               value: {{ include "yipyap-source.adapterImage" . }}
+            - name: YIPYAP_ALLOWED_BASE_URL_HOSTS
+              value: {{ include "yipyap-source.allowedBaseURLHosts" . | quote }}
             - name: POD_NAME
               valueFrom:
                 fieldRef:

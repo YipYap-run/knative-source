@@ -94,7 +94,13 @@ type YipYapSourceSpec struct {
 	Mode YipYapSourceMode `json:"mode,omitempty"`
 
 	// ServiceAccountName optionally pins the adapter Deployment's
-	// ServiceAccount. Defaults to a controller-managed SA.
+	// ServiceAccount. When unset, the adapter runs as the namespace's
+	// "default" ServiceAccount. The adapter does not call the Kubernetes
+	// API and no API token is mounted, so this mainly selects
+	// imagePullSecrets. When the sink has an OIDC audience the adapter runs
+	// as a generated per-source ServiceAccount instead, with this account's
+	// imagePullSecrets, so this account never gets a token for an audience
+	// the source chose.
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
@@ -116,12 +122,19 @@ type YipYapSourceFilter struct {
 	Types []string `json:"types,omitempty"`
 
 	// MonitorIDs optionally restricts to events scoped to specific monitors.
+	// An event's monitor is the "yipyapmonitorid" extension attribute, or
+	// the "monitor_id" field of its JSON data. Events that carry neither
+	// (for example maintenance events) are always delivered. Entries must
+	// be non-empty, unique and must not contain a comma.
 	// Empty list delivers events from every monitor.
 	// +optional
 	MonitorIDs []string `json:"monitorIDs,omitempty"`
 
-	// Severities optionally restricts alert events to the listed severities.
-	// Valid values: "info", "warning", "critical".
+	// Severities optionally restricts alert events (type
+	// "run.yipyap.alert.*") to the listed severities. An event's severity
+	// is the "yipyapseverity" extension attribute, or the "severity" field
+	// of its JSON data. Alert events that carry neither are delivered.
+	// Valid values: "info", "warning", "critical", each at most once.
 	// Does not affect monitor/maintenance events.
 	// +optional
 	Severities []string `json:"severities,omitempty"`

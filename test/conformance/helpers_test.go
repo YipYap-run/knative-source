@@ -38,7 +38,7 @@ func randString(n int) string {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
 		// Fall back to a non-random constant; collision probability is fine
-		// for test namespaces since t.Cleanup scrubs them anyway.
+		// for test namespaces because t.Cleanup deletes them anyway.
 		return "deadbeefdeadbeef"[:2*n]
 	}
 	return hex.EncodeToString(b)
