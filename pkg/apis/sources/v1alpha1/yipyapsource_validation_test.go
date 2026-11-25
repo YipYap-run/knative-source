@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -147,5 +148,73 @@ func TestYipYapSource_Validate_AllValidModes(t *testing.T) {
 				t.Errorf("expected no error for mode %q, got: %v", m, err)
 			}
 		})
+	}
+}
+
+// Severities and monitor IDs are applied by the adapter, so values that
+// would be ignored or split in transit are rejected up front.
+func TestYipYapSourceFilter_Validate_SeveritiesAndMonitorIDs(t *testing.T) {
+	cases := []struct {
+		name   string
+		filter YipYapSourceFilter
+		want   string // substring of the error; "" means valid
+	}{
+		{name: "valid", filter: YipYapSourceFilter{Severities: []string{"critical", "warning"}, MonitorIDs: []string{"mon-1", "mon-2"}}},
+		{name: "empty severity", filter: YipYapSourceFilter{Severities: []string{""}}, want: "severities[0]"},
+		{name: "unknown severity", filter: YipYapSourceFilter{Severities: []string{"Critical"}}, want: "severities[0]"},
+		{name: "duplicate severity", filter: YipYapSourceFilter{Severities: []string{"critical", "info", "critical"}}, want: "duplicates severities[0]"},
+		{name: "empty monitor id", filter: YipYapSourceFilter{MonitorIDs: []string{"mon-1", ""}}, want: "monitorIDs[1]"},
+		{name: "blank monitor id", filter: YipYapSourceFilter{MonitorIDs: []string{"  "}}, want: "must not be empty"},
+		{name: "monitor id with comma", filter: YipYapSourceFilter{MonitorIDs: []string{"a,b"}}, want: "must not contain a comma"},
+		{name: "monitor id with spaces", filter: YipYapSourceFilter{MonitorIDs: []string{" mon-1"}}, want: "leading or trailing spaces"},
+		{name: "duplicate monitor id", filter: YipYapSourceFilter{MonitorIDs: []string{"mon-1", "mon-1"}}, want: "duplicates monitorIDs[0]"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.filter.Validate(context.Background())
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q does not contain %q", err.Error(), tc.want)
+			}
+		})
+	}
+}
+
+// A filter whose query parameters would not fit in a request line is
+// rejected at admission instead of failing every poll with 414.
+func TestYipYapSourceFilter_Validate_QueryLengthCap(t *testing.T) {
+	ids := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = fmt.Sprintf("00000000-0000-0000-0000-%012d", i)
+		}
+		return out
+	}
+	// 100 UUIDs encode to about 4.8 KiB and fit.
+	ok := YipYapSourceFilter{Severities: []string{"critical"}, MonitorIDs: ids(100)}
+	if err := ok.Validate(context.Background()); err != nil {
+		t.Fatalf("100 monitor IDs: unexpected error: %v", err)
+	}
+	// 200 UUIDs are within the CRD maxItems but do not fit.
+	big := YipYapSourceFilter{MonitorIDs: ids(200)}
+	err := big.Validate(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "filter is too long") {
+		t.Fatalf("200 monitor IDs: want a too long error, got %v", err)
+	}
+	// Types count toward the same budget.
+	types := make([]string, 0, 40)
+	for i := 0; i < 40; i++ {
+		types = append(types, fmt.Sprintf("run.yipyap.%0200d", i))
+	}
+	if err := (&YipYapSourceFilter{Types: types}).Validate(context.Background()); err == nil {
+		t.Fatal("long types list: want an error, got nil")
 	}
 }

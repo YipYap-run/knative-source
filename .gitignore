@@ -7,7 +7,8 @@ bazel-*
 .history
 tmp/
 
-# binary built by go build during dev
-receive-adapter
-controller
-webhook
+# binaries built by go build during dev. Anchored to the repo root so the
+# cmd/controller, cmd/webhook and cmd/receive-adapter source dirs stay tracked.
+/receive-adapter
+/controller
+/webhook

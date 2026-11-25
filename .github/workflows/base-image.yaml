@@ -1,0 +1,104 @@
+# Base image refresh: once a week, repin the ko base image
+# (cgr.dev/chainguard/static) in .ko.yaml to the current digest of :latest
+# and open a pull request. Dependabot cannot read .ko.yaml, so without this
+# the pin goes stale silently.
+
+# The workflow builds every image with the new base before it opens the
+# PR. Pull requests opened with GITHUB_TOKEN do not start other workflows,
+# so a maintainer starts CI on the PR by hand (close and reopen it, or push
+# an empty commit) before merging.
+
+name: Base image refresh
+
+on:
+  schedule:
+    # Mondays 06:17 UTC.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: base-image-refresh
+  cancel-in-progress: false
+
+env:
+  # Keep in step with ci.yaml and release.yaml.
+  KO_VERSION: v0.18.0
+  CRANE_VERSION: v0.22.1
+
+jobs:
+  bump:
+    name: Repin chainguard/static
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: main
+          # The build step does not need the write token. The PR step
+          # passes it to git for the push only.
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install ko and crane (pinned)
+        run: |
+          set -euo pipefail
+          go install "github.com/google/ko@${KO_VERSION}"
+          go install "github.com/google/go-containerregistry/cmd/crane@${CRANE_VERSION}"
+
+      - id: bump
+        name: Repin .ko.yaml
+        run: |
+          set -euo pipefail
+          digest=$(hack/bump-base-image.sh .ko.yaml)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          if [ -z "$digest" ]; then
+            echo "Base image pin is current."
+          else
+            echo "New base image digest: $digest"
+          fi
+
+      - name: Build every image with the new base
+        if: steps.bump.outputs.digest != ''
+        env:
+          KO_DOCKER_REPO: ko.invalid/knative-source
+          CGO_ENABLED: "0"
+        run: ko resolve -f config/ --push=false --sbom=none > /dev/null
+
+      - name: Open a pull request
+        if: steps.bump.outputs.digest != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ steps.bump.outputs.digest }}
+        run: |
+          set -euo pipefail
+          short=${DIGEST#sha256:}
+          short=${short:0:12}
+          branch="deps/chainguard-static-$short"
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git_auth=(-c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth")
+          if git "${git_auth[@]}" ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "Branch $branch already exists; a PR for this digest is open or was closed on purpose."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add .ko.yaml
+          git commit -m "chore: bump chainguard/static base image to $short"
+          git "${git_auth[@]}" push origin "$branch"
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "chore: bump chainguard/static base image to $short" \
+            --body "Repins the ko base image in .ko.yaml to cgr.dev/chainguard/static@$DIGEST, the current digest of :latest. All images built with the new base in the workflow run. Start CI on this PR (close and reopen it) before merging."

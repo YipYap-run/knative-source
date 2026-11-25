@@ -6,14 +6,19 @@
 #      `labeled` event. Remove-then-reapply to re-run.
 #   2. Manual trigger from the Actions tab (workflow_dispatch).
 
-# The job is `continue-on-error: true` while the harness matures so a flaky
-# cluster startup doesn't block PRs. Remove the flag once the suite is
-# reliably green across multiple runs.
+# The cluster, images and chart install come from test/smoke/smoke.sh, the
+# same steps as the CI smoke job: Calico enforces the chart's NetworkPolicy,
+# and the controller, webhook and adapter images are built with ko from the
+# checked-out commit and loaded into kind. The suite therefore tests the
+# code under review, not a published release.
+
+# There is no continue-on-error: the workflow only runs on request, so a
+# failure blocks nothing and should show as a failure.
 
 # Security note: this workflow does not consume any user-controlled event
 # payload in `run:` steps (issue/PR titles, commit messages, etc.). The only
 # event-derived value referenced is `github.event.label.name`, used in an
-# `if:` expression — not a shell interpolation.
+# `if:` expression, not a shell interpolation.
 
 name: Conformance
 
@@ -22,18 +27,29 @@ on:
     types: [labeled]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  # Keep in step with ci.yaml.
+  HELM_VERSION: v3.15.0
+  KO_VERSION: v0.18.0
+  KIND_VERSION: v0.31.0
+  SMOKE_CLUSTER: yipyap-conformance
+
 jobs:
   conformance:
     # Narrow the label-triggered firing to the specific label we care about.
     # workflow_dispatch always runs.
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'conformance'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    continue-on-error: true
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -41,53 +57,63 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Create kind cluster
-        uses: engineerd/setup-kind@ecfad61750951586a9ef973db567df1d28671bdc # v0.6.2
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
         with:
-          version: v0.24.0
-          config: test/conformance/kind-config.yaml
-          name: yipyap-conformance
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install ko and kind
+        run: |
+          set -euo pipefail
+          go install "github.com/google/ko@${KO_VERSION}"
+          go install "sigs.k8s.io/kind@${KIND_VERSION}"
+
+      - name: Create kind cluster with Calico
+        run: test/smoke/smoke.sh cluster
 
       - name: Install Knative Eventing
         # Pin to the same minor version as our knative.dev/eventing Go
-        # dependency (v0.48 at the time of writing). Bumping Go deps MUST be
-        # paired with a bump here.
+        # dependency (v0.48 is release 1.21). Bumping Go deps MUST be paired
+        # with a bump here, including the checksums.
         env:
           KNATIVE_EVENTING_VERSION: v1.21.0
+          EVENTING_CRDS_SHA256: 5b1162c756c659f4d023e7581bcd4d88d692567428b4cb2597abcdf5b0f364fc
+          EVENTING_CORE_SHA256: 06e808e0479fd51b15c983cb9bcd6f6bfc7eeaa8969de1c75c3f7169e8f980b3
         run: |
-          set -eu
-          kubectl apply -f "https://github.com/knative/eventing/releases/download/knative-${KNATIVE_EVENTING_VERSION}/eventing-crds.yaml"
-          kubectl apply -f "https://github.com/knative/eventing/releases/download/knative-${KNATIVE_EVENTING_VERSION}/eventing-core.yaml"
+          set -euo pipefail
+          base="https://github.com/knative/eventing/releases/download/knative-${KNATIVE_EVENTING_VERSION}"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/eventing-crds.yaml" "$base/eventing-crds.yaml"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/eventing-core.yaml" "$base/eventing-core.yaml"
+          echo "$EVENTING_CRDS_SHA256  $RUNNER_TEMP/eventing-crds.yaml" | sha256sum -c -
+          echo "$EVENTING_CORE_SHA256  $RUNNER_TEMP/eventing-core.yaml" | sha256sum -c -
+          kubectl apply -f "$RUNNER_TEMP/eventing-crds.yaml"
+          kubectl apply -f "$RUNNER_TEMP/eventing-core.yaml"
           kubectl wait --for=condition=Ready pods --all -n knative-eventing --timeout=300s
 
+      - name: Build and load images
+        run: test/smoke/smoke.sh images
+
+      - name: Start the stub YipYap API
+        # The suite points its sources at this stub, so a conformance run
+        # never sends requests to the real console.
+        run: test/smoke/smoke.sh stub
+
       - name: Install yipyap-source chart
-        # The chart's default image tags resolve to published ghcr.io images.
-        # Building controller/webhook/adapter images inside CI is tracked as
-        # a follow-up; for now conformance runs against whatever the default
-        # chart pulls (typically :latest).
-        run: |
-          set -eu
-          helm version
-          helm install yipyap-source ./chart/yipyap-source \
-            -n yipyap-sources --create-namespace
-          kubectl wait --for=condition=Available deployment \
-            -n yipyap-sources --all --timeout=300s
+        # Installs the chart from this checkout with the images built above
+        # (repository smoke.local/knative-source-*, tag smoke). The
+        # NetworkPolicy is on, with apiServerCIDRs read from the cluster.
+        run: test/smoke/smoke.sh chart
 
       - name: Run conformance suite
         env:
           KUBECONFIG: ${{ github.workspace }}/.kubeconfig
+          # smoke.sh writes the stub's API key under $RUNNER_TEMP/yipyap-smoke.
+          YIPYAP_CONFORMANCE_BASE_URL: https://yipyap-stub.yipyap-smoke.svc.cluster.local
+          YIPYAP_CONFORMANCE_API_KEY_FILE: ${{ runner.temp }}/yipyap-smoke/api-key
         run: |
           set -eu
-          kind get kubeconfig --name yipyap-conformance > "$KUBECONFIG"
+          kind get kubeconfig --name "$SMOKE_CLUSTER" > "$KUBECONFIG"
           go test -tags conformance -v -timeout 20m ./test/conformance/...
 
-      - name: Dump controller logs on failure
-        # Runs even on failure so CI logs capture why the controller didn't
-        # mark Ready. `|| true` on each command because the resources may be
-        # absent if setup failed early.
+      - name: Dump cluster state on failure
         if: failure()
-        run: |
-          kubectl -n yipyap-sources get all -o wide || true
-          kubectl -n yipyap-sources logs -l app.kubernetes.io/component=controller --tail=500 || true
-          kubectl -n yipyap-sources logs -l app.kubernetes.io/component=webhook --tail=500 || true
-          kubectl get yipyapsources -A -o yaml || true
+        run: test/smoke/smoke.sh dump

@@ -1,3 +1,19 @@
+/*
+Copyright 2026 The YipYap Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package source
 
 import (
@@ -5,8 +21,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -33,11 +47,10 @@ func makeHintServer(t *testing.T, status int, body any) *httptest.Server {
 func baseCfg(t *testing.T, baseURL string) *Config {
 	t.Helper()
 	return &Config{
-		Sink:           "http://sink.example/",
-		APIKey:         "secret",
-		BaseURL:        baseURL,
-		PollInterval:   5 * time.Second,
-		CRModeFilePath: filepath.Join(t.TempDir(), "source-mode-missing"),
+		Sink:         "http://sink.example/",
+		APIKey:       "secret",
+		BaseURL:      baseURL,
+		PollInterval: 5 * time.Second,
 	}
 }
 
@@ -49,12 +62,8 @@ func TestResolveMode_EnvPoll(t *testing.T) {
 	})
 	defer srv.Close()
 	cfg := baseCfg(t, srv.URL)
+	// The server recommends stream, but YIPYAP_MODE wins.
 	cfg.Mode = "poll"
-	// Write a CR file that would otherwise suggest stream.
-	cfg.CRModeFilePath = filepath.Join(t.TempDir(), "source-mode")
-	if err := os.WriteFile(cfg.CRModeFilePath, []byte("stream"), 0o644); err != nil {
-		t.Fatalf("write cr file: %v", err)
-	}
 
 	res, err := ResolveMode(context.Background(), cfg, srv.Client(), time.Now)
 	if err != nil {
@@ -85,62 +94,21 @@ func TestResolveMode_EnvInvalid(t *testing.T) {
 	}
 }
 
-func TestResolveMode_CRFileOverridesServer(t *testing.T) {
+func TestResolveMode_AutoUsesServerHint(t *testing.T) {
 	srv := makeHintServer(t, http.StatusOK, map[string]any{
-		"recommended_mode": "poll",
+		"recommended_mode": "stream",
 	})
 	defer srv.Close()
-	cfg := baseCfg(t, srv.URL)
-	cfg.CRModeFilePath = filepath.Join(t.TempDir(), "source-mode")
-	if err := os.WriteFile(cfg.CRModeFilePath, []byte("stream"), 0o644); err != nil {
-		t.Fatalf("write cr file: %v", err)
-	}
-	res, err := ResolveMode(context.Background(), cfg, srv.Client(), time.Now)
-	if err != nil {
-		t.Fatalf("ResolveMode: %v", err)
-	}
-	if res.Mode != "stream" || res.Source != "cr" {
-		t.Errorf("got mode=%q source=%q; want stream/cr", res.Mode, res.Source)
-	}
-}
-
-func TestResolveMode_CRFileAuto_FallsThroughToServer(t *testing.T) {
-	srv := makeHintServer(t, http.StatusOK, map[string]any{
-		"recommended_mode":      "stream",
-		"poll_interval_seconds": 0,
-		"refresh_after_seconds": 0,
-	})
-	defer srv.Close()
-	cfg := baseCfg(t, srv.URL)
-	cfg.CRModeFilePath = filepath.Join(t.TempDir(), "source-mode")
-	if err := os.WriteFile(cfg.CRModeFilePath, []byte("auto\n"), 0o644); err != nil {
-		t.Fatalf("write cr file: %v", err)
-	}
-	res, err := ResolveMode(context.Background(), cfg, srv.Client(), time.Now)
-	if err != nil {
-		t.Fatalf("ResolveMode: %v", err)
-	}
-	if res.Mode != "stream" || res.Source != "server" {
-		t.Errorf("got mode=%q source=%q; want stream/server", res.Mode, res.Source)
-	}
-}
-
-func TestResolveMode_CRFileInvalid_FallsThrough(t *testing.T) {
-	srv := makeHintServer(t, http.StatusOK, map[string]any{
-		"recommended_mode": "poll",
-	})
-	defer srv.Close()
-	cfg := baseCfg(t, srv.URL)
-	cfg.CRModeFilePath = filepath.Join(t.TempDir(), "source-mode")
-	if err := os.WriteFile(cfg.CRModeFilePath, []byte("sideways"), 0o644); err != nil {
-		t.Fatalf("write cr file: %v", err)
-	}
-	res, err := ResolveMode(context.Background(), cfg, srv.Client(), time.Now)
-	if err != nil {
-		t.Fatalf("ResolveMode: %v", err)
-	}
-	if res.Mode != "poll" || res.Source != "server" {
-		t.Errorf("got mode=%q source=%q; want poll/server", res.Mode, res.Source)
+	for _, mode := range []string{"", "auto", " AUTO "} {
+		cfg := baseCfg(t, srv.URL)
+		cfg.Mode = mode
+		res, err := ResolveMode(context.Background(), cfg, srv.Client(), time.Now)
+		if err != nil {
+			t.Fatalf("mode %q: ResolveMode: %v", mode, err)
+		}
+		if res.Mode != "stream" || res.Source != "server" {
+			t.Errorf("mode %q: got mode=%q source=%q; want stream/server", mode, res.Mode, res.Source)
+		}
 	}
 }
 
@@ -206,38 +174,5 @@ func TestResolveMode_PartialHint_UsesDefaults(t *testing.T) {
 	}
 	if res.RefreshAfter != 5*time.Minute {
 		t.Errorf("RefreshAfter = %v, want 5m default", res.RefreshAfter)
-	}
-}
-
-func TestReadCRModeFile_Missing(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "nope")
-	mode, ok := readCRModeFile(p)
-	if ok {
-		t.Errorf("expected ok=false for missing file, got mode=%q ok=true", mode)
-	}
-	if mode != "" {
-		t.Errorf("expected empty mode for missing file, got %q", mode)
-	}
-}
-
-func TestReadCRModeFile_Valid(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "source-mode")
-	if err := os.WriteFile(p, []byte("stream"), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	mode, ok := readCRModeFile(p)
-	if !ok || mode != "stream" {
-		t.Errorf("got mode=%q ok=%v; want stream/true", mode, ok)
-	}
-}
-
-func TestReadCRModeFile_TrimsWhitespace(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "source-mode")
-	if err := os.WriteFile(p, []byte("  poll\n"), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	mode, ok := readCRModeFile(p)
-	if !ok || mode != "poll" {
-		t.Errorf("got mode=%q ok=%v; want poll/true", mode, ok)
 	}
 }

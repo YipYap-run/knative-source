@@ -1,5 +1,5 @@
 /*
-Copyright 2026 Cyra.
+Copyright 2026 The YipYap Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,9 +18,12 @@ package main
 
 import (
 	"context"
+	"os"
 
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	o11yconfigmap "knative.dev/eventing/pkg/observability/configmap"
+	kubeclient "knative.dev/pkg/client/injection/kube/client"
 	"knative.dev/pkg/configmap"
 	"knative.dev/pkg/controller"
 	"knative.dev/pkg/injection/sharedmain"
@@ -34,6 +37,8 @@ import (
 	"knative.dev/pkg/webhook/resourcesemantics/validation"
 
 	"github.com/YipYap-run/knative-source/pkg/apis/sources/v1alpha1"
+	"github.com/YipYap-run/knative-source/pkg/baseurl"
+	"github.com/YipYap-run/knative-source/pkg/secretaccess"
 )
 
 // types is the set of resources the webhook will default and validate.
@@ -41,8 +46,8 @@ var types = map[schema.GroupVersionKind]resourcesemantics.GenericCRD{
 	v1alpha1.SchemeGroupVersion.WithKind("YipYapSource"): &v1alpha1.YipYapSource{},
 }
 
-// callbacks is the map of extra validating callbacks; currently empty —
-// Validate() on the type itself does the work.
+// callbacks is the map of extra validating callbacks. It is empty because
+// Validate() on the type does the work.
 var callbacks = map[schema.GroupVersionKind]validation.Callback{}
 
 const (
@@ -82,8 +87,19 @@ func NewDefaultingAdmissionController(ctx context.Context, cmw configmap.Watcher
 }
 
 // NewValidationAdmissionController sets up the validating admission webhook
-// that runs Validate() on every YipYapSource create/update.
+// that runs Validate() on every YipYapSource create/update. Each request
+// context carries the operator's baseURL policy (from
+// YIPYAP_ALLOWED_BASE_URL_HOSTS) and a SubjectAccessReview checker, so
+// Validate can enforce https plus the host allowlist and confirm that the
+// requesting user may read the API key Secret.
 func NewValidationAdmissionController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
+	policy, err := baseurl.FromEnv(os.LookupEnv)
+	if err != nil {
+		logging.FromContext(ctx).Fatalw("invalid base URL allowlist", zap.Error(err))
+	}
+	logging.FromContext(ctx).Infow("base URL allowlist", zap.Strings("hosts", policy.Hosts()))
+	infuse := validationContext(policy, secretaccess.SARChecker{Client: kubeclient.Get(ctx)})
+
 	return validation.NewAdmissionController(ctx,
 
 		// Name of the resource webhook.
@@ -97,9 +113,7 @@ func NewValidationAdmissionController(ctx context.Context, cmw configmap.Watcher
 
 		// A function that infuses the context passed to Validate/SetDefaults
 		// with custom metadata.
-		func(ctx context.Context) context.Context {
-			return ctx
-		},
+		infuse,
 
 		// Whether to disallow unknown fields.
 		true,
@@ -107,6 +121,15 @@ func NewValidationAdmissionController(ctx context.Context, cmw configmap.Watcher
 		// Extra validating callbacks to be applied to resources.
 		callbacks,
 	)
+}
+
+// validationContext returns the per-request context infuser for the
+// validating webhook.
+func validationContext(policy *baseurl.Policy, checker v1alpha1.SecretReadChecker) func(context.Context) context.Context {
+	return func(ctx context.Context) context.Context {
+		ctx = baseurl.WithPolicy(ctx, policy)
+		return v1alpha1.WithSecretReadChecker(ctx, checker)
+	}
 }
 
 // NewConfigValidationController sets up a ConfigMap validation webhook so

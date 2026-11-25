@@ -19,12 +19,16 @@ inline.
 ### What the suite checks
 
 - The `YipYapSource` CR applies and registers with the API server.
-- Reconcile reports `SinkProvided=True` and `Ready=True` within 5 minutes.
-- `Status.SinkURI` is populated after `Ready=True`.
+- Reconcile reports `SinkProvided=True` within 5 minutes, and the adapter
+  reports in (`Connected` is `True` or `False`). The suite does not need a
+  YipYap backend (CI uses the smoke stub), so `Ready=False` with reason
+  `APIKeyRejected` or `APIUnreachable` is a pass, as long as Ready carries a
+  reason and message.
+- `Status.SinkURI` is populated after `SinkProvided=True`.
 - `Status.CloudEventAttributes` advertises at least one entry, each with a
   non-empty `type`.
-- The adapter `Deployment` named by `Status.DeploymentName` exists and is
-  `Available`.
+- The adapter `Deployment` named by `Status.DeploymentName` exists, and is
+  `Available` when the source is Ready.
 - Deleting the `YipYapSource` cascades to the adapter `Deployment` via owner
   references.
 
@@ -46,18 +50,46 @@ Prerequisites:
 
 - A Kubernetes cluster (kind is fine).
 - [Knative Eventing][ke-install] installed in the cluster.
-- The `yipyap-source` chart installed:
+- The `yipyap-source` chart installed, with controller, webhook and adapter
+  images the cluster can pull. The smoke script does both for a kind
+  cluster: it creates the cluster with Calico, builds the three images from
+  this checkout with ko, loads them into kind and installs the chart with
+  `networkPolicy.apiServerCIDRs` read from the cluster. It needs kind,
+  kubectl, helm, ko, docker and openssl.
 
   ```bash
+  export SMOKE_CLUSTER=yipyap-conformance
+  test/smoke/smoke.sh cluster
+  test/smoke/smoke.sh images
+  test/smoke/smoke.sh stub
+  test/smoke/smoke.sh chart
+  ```
+
+  `smoke.sh stub` runs a stand-in YipYap API in the cluster. Point the
+  suite at it so no request reaches the real console:
+
+  ```bash
+  export YIPYAP_CONFORMANCE_BASE_URL=https://yipyap-stub.yipyap-smoke.svc.cluster.local
+  export YIPYAP_CONFORMANCE_API_KEY_FILE=/tmp/yipyap-smoke/api-key
+  ```
+
+  Without these variables the sources use the default baseURL and a
+  placeholder key.
+
+  For another cluster, build and push the images yourself and install the
+  chart with `images.*.repository` and `images.*.tag` set to them:
+
+  ```bash
+  hack/apiserver-cidrs-values.sh > /tmp/apiserver-values.yaml
   helm install yipyap-source ./chart/yipyap-source \
-    -n yipyap-sources --create-namespace
+    -n yipyap-sources --create-namespace \
+    -f /tmp/apiserver-values.yaml
   kubectl wait --for=condition=Available deployment \
     -n yipyap-sources --all --timeout=300s
   ```
 
-- The adapter image (`ghcr.io/yipyap-run/knative-source-receive-adapter:latest`) reachable
-  from the cluster's node(s). When using kind, `kind load docker-image` the
-  three images (controller, webhook, adapter) after building them locally.
+  Without image overrides the chart installs the published images tagged
+  with the chart's `appVersion`.
 
 Then:
 
@@ -83,17 +115,21 @@ suite against a freshly-provisioned kind cluster. It's gated two ways:
    `labeled` event.
 2. Trigger manually via the Actions tab (`workflow_dispatch`).
 
-The workflow is marked `continue-on-error: true` while the harness matures;
-once it's proven stable across multiple runs we'll flip the flag. The
-workflow currently expects the controller/webhook/adapter images to be
-available as published artifacts; building them inside CI is a follow-up.
+It sets up the cluster, images and chart with `test/smoke/smoke.sh`, so it
+tests the images built from the commit under review. Every pull request
+also runs the kind smoke job in `.github/workflows/ci.yaml`, which installs
+the chart the same way and checks that `example.yaml` becomes Ready against
+a stub YipYap API.
 
 ## Troubleshooting
 
-- **Tests hang on "Ready never reached True"**: the subtest dumps every
+- **Tests fail on "source never settled"**: the subtest dumps every
   condition on the source before failing. Check `SinkProvided`: it should be
   `True` if the sink ref resolves, `False` with a reason if the controller
-  rejected the ref, or `Unknown` if reconcile hasn't run at all.
+  rejected the ref, or `Unknown` if reconcile hasn't run at all. If
+  `Connected` stays `Unknown` with reason `AdapterStarting`, the adapter pod
+  never started; with `AdapterStatusUnknown`, the controller could not list
+  pods (check its RBAC).
 - **"adapter Deployment not Available"**: usually means the adapter image
   can't be pulled, or the adapter is crash-looping on a missing API key.
   `kubectl describe deploy -n <conformance-ns> <deploymentName>`.

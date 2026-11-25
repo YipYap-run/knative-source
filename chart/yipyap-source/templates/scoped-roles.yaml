@@ -1,21 +1,17 @@
 {{- /*
-Per-namespace Role + RoleBinding pairs for tightened blast radius.
+Per-namespace Role + RoleBinding pairs that hold the controller's write
+access when `controller.scopedNamespaces` is non-empty.
 
-When `controller.scopedNamespaces` is non-empty, this template emits a Role +
-RoleBinding for each listed namespace that grants the controller SA the
-namespace-scoped permissions it needs to reconcile receive-adapter
-Deployments and read referenced ConfigMaps without requiring those verbs
-cluster-wide.
+Each listed namespace gets create/update/patch/delete on Deployments, list
+on Pods and get/create on ServiceAccounts (per-source OIDC identities). Reads stay cluster-wide on the ClusterRole (clusterrole.yaml)
+because the Deployment and YipYapSource informers list and watch every
+namespace; a namespaced Role cannot satisfy a cluster-wide list, and without
+it the informer cache never syncs.
 
-The cluster-wide ClusterRole (clusterrole.yaml) still grants the
-non-namespaced verbs the controller needs (events, yipyapsources,
-clusterroles/list, leases). Secrets are intentionally not granted at any
-level. The controller never reads Secret values in-process; the
+Leader-election leases and the controller's own config ConfigMaps are
+granted in the release namespace by controller-role.yaml whether or not the
+release namespace is listed here. Secrets are not granted at any level: the
 receive-adapter Pod resolves SecretKeyRef in its own namespace via kubelet.
-
-Empty `controller.scopedNamespaces` (default) keeps the cluster-wide
-posture for Deployments + ConfigMaps; setting any namespace narrows the
-posture by carving out per-namespace Role grants instead.
 */}}
 {{- with .Values.controller.scopedNamespaces }}
 {{- $sa := include "yipyap-source.controllerServiceAccountName" $ -}}
@@ -31,12 +27,18 @@ metadata:
   labels:
     {{- $labels | nindent 4 }}
 rules:
+  # Reads come from the cluster-wide ClusterRole; only writes are scoped.
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["create", "update", "patch", "delete"]
+  # Find the adapter pod and read its status endpoint (Connected condition).
   - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "list", "watch"]
+    resources: ["pods"]
+    verbs: ["list"]
+  # Per-source OIDC ServiceAccounts for sinks with an OIDC audience.
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

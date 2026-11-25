@@ -20,6 +20,8 @@ import (
 	"context"
 
 	"knative.dev/pkg/apis"
+
+	"github.com/YipYap-run/knative-source/pkg/baseurl"
 )
 
 // Default values applied by SetDefaults when the corresponding fields are unset.
@@ -29,7 +31,7 @@ const (
 
 	// DefaultBaseURL is the hosted YipYap console endpoint. Override for
 	// self-hosted FOSS deployments.
-	DefaultBaseURL = "https://console.yipyap.run"
+	DefaultBaseURL = baseurl.DefaultBaseURL
 )
 
 // SetDefaults applies API defaults to the YipYapSource.

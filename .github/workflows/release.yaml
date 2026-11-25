@@ -4,12 +4,22 @@
 
 # A git tag of the form vX.Y.Z is the only release trigger. The workflow
 # refuses to run unless chart/yipyap-source/Chart.yaml's `version:` AND
-# `appVersion:` already equal X.Y.Z — Chart.yaml is bumped in the same
+# `appVersion:` already equal X.Y.Z. Chart.yaml is bumped in the same
 # commit that gets tagged, so there's a single source of truth for the
 # version that ships.
 
+# Nothing is published until the full CI suite (ci.yaml, including the kind
+# smoke test) passes on the tagged commit.
+
 # All three images share Chart.yaml's appVersion, so the chart pins a
 # self-consistent set of binaries on every release.
+
+# Published tags are never overwritten: preflight and each image job fail
+# when a tag already exists in GHCR, so a re-run or a workflow_dispatch of
+# an old tag cannot change what a version deploys. Each image is signed
+# with cosign keyless and gets a SLSA build provenance attestation, and the
+# packaged chart pins every image by the digest this run pushed. README.md
+# "Verifying release images" shows how users check both.
 
 name: Release
 
@@ -24,9 +34,25 @@ on:
         required: true
         type: string
 
+# Least privilege: each job gets only what it needs. Only the images job
+# can write packages, and only the chart job can write contents.
 permissions:
   contents: read
-  packages: write
+
+# One release run per tag at a time. The tag check and the push are separate
+# steps, so two runs for the same tag (a tag push and a workflow_dispatch)
+# could otherwise both pass the check. Never cancel a run in progress: it
+# may be part way through pushing.
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # Keep in step with ci.yaml.
+  KO_VERSION: v0.18.0
+  CRANE_VERSION: v0.22.1
+  COSIGN_VERSION: v3.1.5
+  HELM_VERSION: v3.15.0
 
 jobs:
   validate:
@@ -38,6 +64,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
 
       - id: parse
         name: Compare tag to Chart.yaml
@@ -46,14 +73,14 @@ jobs:
         run: |
           set -euo pipefail
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
-            echo "::error::tag '$TAG' is not a valid v-prefixed semver — refusing to release"
+            echo "::error::tag '$TAG' is not a valid v-prefixed semver, refusing to release"
             exit 1
           fi
           VERSION="${TAG#v}"
           CHART_VERSION=$(grep '^version:' chart/yipyap-source/Chart.yaml | awk '{print $2}' | tr -d '"')
           APP_VERSION=$(grep '^appVersion:' chart/yipyap-source/Chart.yaml | awk '{print $2}' | tr -d '"')
           if [ "$VERSION" != "$CHART_VERSION" ]; then
-            echo "::error::tag $TAG implies version $VERSION but Chart.yaml version is $CHART_VERSION — bump Chart.yaml in the same commit and re-tag"
+            echo "::error::tag $TAG implies version $VERSION but Chart.yaml version is $CHART_VERSION; bump Chart.yaml in the same commit and re-tag"
             exit 1
           fi
           if [ "$VERSION" != "$APP_VERSION" ]; then
@@ -63,30 +90,92 @@ jobs:
           echo "Lockstep OK: tag=$TAG version=$VERSION matches Chart.yaml"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-  images:
-    name: Publish ${{ matrix.binary }} image
+  checks:
+    name: CI checks
+    # The same jobs that gate pull requests, run on the commit being
+    # released. Reused so the two lists cannot drift apart.
+    uses: ./.github/workflows/ci.yaml
+    permissions:
+      contents: read
+    with:
+      ref: ${{ inputs.tag || github.ref_name }}
+
+  preflight:
+    name: Refuse to overwrite published tags
     needs: validate
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        binary: [controller, webhook, receive-adapter]
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
 
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Install ko (pinned)
-        # Pinned to v0.18.0 so a registry-side compromise of @latest can't
-        # ship a malicious build into our release. Bump the version
-        # intentionally with a comment explaining what changed.
-        run: go install github.com/google/ko@v0.18.0
+      - name: Install crane
+        run: go install "github.com/google/go-containerregistry/cmd/crane@${CRANE_VERSION}"
+
+      - name: Check no image tag exists yet
+        # Fails before anything is built or pushed, so a refused release
+        # leaves no partial set of images behind.
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          echo "$GHCR_TOKEN" | crane auth login ghcr.io --username "$ACTOR" --password-stdin
+          hack/release-tag-absent.sh \
+            "ghcr.io/yipyap-run/knative-source-controller:$VERSION" \
+            "ghcr.io/yipyap-run/knative-source-webhook:$VERSION" \
+            "ghcr.io/yipyap-run/knative-source-receive-adapter:$VERSION"
+
+  images:
+    name: Publish ${{ matrix.binary }} image
+    needs: [validate, checks, preflight]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      # A cancelled leg may already have pushed its tag without recording
+      # the digest, which burns the version. Let every leg finish.
+      fail-fast: false
+      matrix:
+        binary: [controller, webhook, receive-adapter]
+    env:
+      # --bare publishes to exactly KO_DOCKER_REPO, the repo the chart
+      # expects, instead of adding an md5-of-import-path subpath.
+      KO_DOCKER_REPO: ghcr.io/yipyap-run/knative-source-${{ matrix.binary }}
+      BINARY: ${{ matrix.binary }}
+      VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install ko and crane (pinned)
+        # Pinned so a registry-side compromise of @latest can't ship a
+        # malicious build into our release. Bump the versions on purpose.
+        run: |
+          set -euo pipefail
+          go install "github.com/google/ko@${KO_VERSION}"
+          go install "github.com/google/go-containerregistry/cmd/crane@${CRANE_VERSION}"
 
       - name: Login to GHCR
+        # ko login writes ~/.docker/config.json, which crane reads too.
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
@@ -94,13 +183,13 @@ jobs:
           set -euo pipefail
           echo "$GHCR_TOKEN" | ko login ghcr.io --username "$ACTOR" --password-stdin
 
+      - name: Check the tag is still free
+        # Repeats the preflight check for this image right before the push,
+        # which also covers re-running only this job.
+        run: hack/release-tag-absent.sh "$KO_DOCKER_REPO:$VERSION"
+
       - name: ko publish
         env:
-          # ko publishes to ${KO_DOCKER_REPO}:${tag}. --bare drops the
-          # md5-of-import-path subpath ko adds by default, giving us the
-          # clean repo name the chart expects.
-          KO_DOCKER_REPO: ghcr.io/yipyap-run/knative-source-${{ matrix.binary }}
-          VERSION: ${{ needs.validate.outputs.version }}
           # CGO_ENABLED=0 is required for cross-compiling to linux/arm64
           # from an X64 host. Without it `go build` invokes the host
           # assembler against runtime/cgo's arm64 sources and bails. The
@@ -112,11 +201,114 @@ jobs:
           ko publish --bare \
             --tags "$VERSION" \
             --platform=linux/amd64,linux/arm64 \
-            ./cmd/${{ matrix.binary }}
+            --image-refs image-refs.txt \
+            "./cmd/$BINARY"
+
+      - name: Record the digest
+        # The tag must resolve to the digest ko just pushed; the sign and
+        # chart jobs use only the digest from here on.
+        run: |
+          set -euo pipefail
+          ref=$(head -n1 image-refs.txt)
+          digest=${ref##*@}
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "::error::ko returned '$ref', which has no sha256 digest"
+            exit 1
+          fi
+          tagged=$(crane digest "$KO_DOCKER_REPO:$VERSION")
+          if [ "$tagged" != "$digest" ]; then
+            echo "::error::$KO_DOCKER_REPO:$VERSION is $tagged, ko pushed $digest"
+            exit 1
+          fi
+          mkdir -p digests
+          printf '%s\n' "$digest" > "digests/$BINARY"
+          echo "$KO_DOCKER_REPO@$digest"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.binary }}
+          path: digests/${{ matrix.binary }}
+          if-no-files-found: error
+          retention-days: 7
+
+  sign:
+    name: Sign and attest ${{ matrix.binary }} image
+    needs: images
+    runs-on: ubuntu-latest
+    # The only job that can mint an OIDC token. It runs no repo code: it
+    # signs the digest the images job recorded and attaches provenance.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        binary: [controller, webhook, receive-adapter]
+    env:
+      REPO: ghcr.io/yipyap-run/knative-source-${{ matrix.binary }}
+      BINARY: ${{ matrix.binary }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: digest-${{ matrix.binary }}
+          path: digests
+
+      - id: digest
+        name: Read the digest
+        run: |
+          set -euo pipefail
+          digest=$(head -n1 "digests/$BINARY")
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "::error::bad digest artifact for $BINARY: '$digest'"
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Login to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          echo "$GHCR_TOKEN" | cosign login ghcr.io --username "$ACTOR" --password-stdin
+
+      - name: cosign sign (keyless)
+        env:
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: cosign sign --yes "$REPO@$DIGEST"
+
+      - name: Attach SLSA build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REPO }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify signature and provenance
+        # The same checks README.md tells users to run, pinned to this
+        # workflow run's identity.
+        env:
+          DIGEST: ${{ steps.digest.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cosign verify "$REPO@$DIGEST" \
+            --certificate-identity "https://github.com/$GITHUB_WORKFLOW_REF" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+          gh attestation verify "oci://$REPO@$DIGEST" \
+            --repo "$GITHUB_REPOSITORY" \
+            --bundle-from-oci > /dev/null
+          echo "Verified $REPO@$DIGEST"
 
   chart:
     name: Publish chart
-    needs: images
+    needs: [images, sign]
     runs-on: ubuntu-latest
     permissions:
       # chart-releaser-action commits chart tarballs + index.yaml to gh-pages.
@@ -136,7 +328,41 @@ jobs:
 
       - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5
         with:
-          version: v3.15.0
+          version: ${{ env.HELM_VERSION }}
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+
+      - name: Pin image digests in the chart
+        # A chart version must always deploy the same bytes, so the
+        # packaged values.yaml carries the digests this run pushed.
+        run: |
+          set -euo pipefail
+          hack/set-image-digests.sh chart/yipyap-source/values.yaml \
+            "controller=$(head -n1 digests/controller)" \
+            "webhook=$(head -n1 digests/webhook)" \
+            "adapter=$(head -n1 digests/receive-adapter)"
+          rendered=$(helm template yipyap-source chart/yipyap-source \
+            -f chart/yipyap-source/ci/apiserver-cidrs-values.yaml)
+          for binary in controller webhook receive-adapter; do
+            ref="ghcr.io/yipyap-run/knative-source-$binary@$(head -n1 "digests/$binary")"
+            if ! grep -qF "$ref" <<< "$rendered"; then
+              echo "::error::packaged chart does not deploy $ref"
+              exit 1
+            fi
+          done
+
+      - name: Package the chart
+        run: |
+          set -euo pipefail
+          rm -rf .cr-release-packages
+          mkdir -p .cr-release-packages
+          helm package chart/yipyap-source --destination .cr-release-packages
+          # chart-releaser switches to gh-pages; leave the tree clean.
+          git checkout -- chart/yipyap-source/values.yaml
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f # v1.7.0
@@ -145,3 +371,5 @@ jobs:
         with:
           charts_dir: chart
           packages_with_index: true
+          # Packaged above with the digests pinned.
+          skip_packaging: true

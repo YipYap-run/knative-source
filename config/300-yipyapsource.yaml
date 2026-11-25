@@ -22,7 +22,16 @@ metadata:
   annotations:
     registry.knative.dev/eventTypes: |
       [
-        { "type": "dev.yipyap.source" }
+        { "type": "run.yipyap.alert.fired.v1" },
+        { "type": "run.yipyap.alert.acknowledged.v1" },
+        { "type": "run.yipyap.alert.resolved.v1" },
+        { "type": "run.yipyap.alert.escalated.v1" },
+        { "type": "run.yipyap.monitor.up.v1" },
+        { "type": "run.yipyap.monitor.down.v1" },
+        { "type": "run.yipyap.monitor.degraded.v1" },
+        { "type": "run.yipyap.monitor.heartbeat_missed.v1" },
+        { "type": "run.yipyap.maintenance.started.v1" },
+        { "type": "run.yipyap.maintenance.ended.v1" }
       ]
   name: yipyapsources.sources.yipyap.run
 spec:
@@ -36,14 +45,15 @@ spec:
         status: {}
       schema:
         openAPIV3Schema:
-          # Static schema floor. Unknown fields are rejected at
-          # apiserver-side validation even when the admission webhook is
-          # unavailable / failurePolicy=Ignore.
+          # Static schema floor, enforced by the apiserver even when the
+          # admission webhook is unavailable or set to failurePolicy=Ignore.
           #
-          # `additionalProperties: false` is FORBIDDEN by the Kubernetes
-          # structural-schema rules when the status subresource is enabled
-          # (the apiserver rejects the CRD registration). We rely on the
-          # implicit strict default instead.
+          # Do not add `additionalProperties: false` next to `properties`:
+          # the apiserver rejects the CRD because the two are mutually
+          # exclusive. Listing `properties` already makes the apiserver drop
+          # unknown fields, or reject them under strict field validation
+          # (the kubectl default). test/crd checks this file against the
+          # chart CRD and the apiserver's CRD rules.
           #
           # `required: [spec]` at root is also illegal when the status
           # subresource is enabled: the apiserver issues status-only writes
@@ -60,12 +70,10 @@ spec:
             spec:
               type: object
               required: [apiKeyRef]
-              additionalProperties: false
               properties:
                 apiKeyRef:
                   type: object
                   required: [name]
-                  additionalProperties: false
                   properties:
                     name:
                       type: string
@@ -80,17 +88,24 @@ spec:
                 baseURL:
                   type: string
                   maxLength: 2048
-                  pattern: '^https?://[^\s]+$'
+                  # https only. The admission webhook also requires the host
+                  # to be on the operator allowlist and rejects user info.
+                  pattern: '^https://[^\s]+$'
                 mode:
                   type: string
                   enum: ["", auto, poll, stream]
                 serviceAccountName:
+                  description: >-
+                    ServiceAccount the adapter pod runs as. When unset, the
+                    pod uses the namespace's default ServiceAccount. No API
+                    token is mounted. For a sink with an OIDC audience the
+                    pod runs as a generated per-source ServiceAccount and
+                    takes only this account's imagePullSecrets.
                   type: string
                   maxLength: 253
                   pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
                 filter:
                   type: object
-                  additionalProperties: false
                   properties:
                     types:
                       type: array
@@ -108,7 +123,7 @@ spec:
                         maxLength: 256
                     severities:
                       type: array
-                      maxItems: 8
+                      maxItems: 3
                       items:
                         type: string
                         enum: [info, warning, critical]
@@ -128,6 +143,10 @@ spec:
         - name: Reason
           type: string
           jsonPath: ".status.conditions[?(@.type=='Ready')].reason"
+        - name: Message
+          type: string
+          priority: 1
+          jsonPath: ".status.conditions[?(@.type=='Ready')].message"
         - name: Sink
           type: string
           jsonPath: .status.sinkUri

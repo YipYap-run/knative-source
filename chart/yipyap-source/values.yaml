@@ -1,44 +1,63 @@
 # Default values for yipyap-source.
 # This is a YAML-formatted file. Values may be overridden via --set or a custom values file.
 
-# Namespace where the controller + webhook run.
+# Namespace where the controller + webhook run. With create=true everything
+# goes into namespace.name. The chart creates that namespace only when it
+# differs from the release namespace and does not exist yet; the release
+# namespace itself comes from helm install --create-namespace.
 namespace:
   create: true
   name: yipyap-sources
 
 # Container images.
+# digest (sha256:<64 hex>) pins an image by content: the chart then deploys
+# repository@digest. Published charts ship with the digests of the images
+# the release built, so a chart version always deploys the same bytes. To
+# deploy by tag instead, set both tag and digest: "".
 images:
   controller:
     repository: ghcr.io/yipyap-run/knative-source-controller
     # If empty, falls back to .Chart.AppVersion.
     tag: ""
+    digest: ""
     pullPolicy: IfNotPresent
   webhook:
     repository: ghcr.io/yipyap-run/knative-source-webhook
     tag: ""
+    digest: ""
     pullPolicy: IfNotPresent
   # Adapter (receive-adapter) image deployed per-YipYapSource by the controller.
   # Set via the YIPYAP_SOURCE_RA_IMAGE env var on the controller Deployment.
   adapter:
     repository: ghcr.io/yipyap-run/knative-source-receive-adapter
     tag: ""
+    digest: ""
 
 # Controller Deployment.
 controller:
   replicas: 1
-  # scopedNamespaces narrows the controller SA's namespace-scoped permissions
-  # (Deployments, ConfigMaps) from cluster-wide to a per-namespace Role +
-  # RoleBinding pair for each entry.
-
+  # scopedNamespaces limits where the controller may create, update, patch
+  # and delete adapter Deployments (and list adapter Pods). Entries must be
+  # distinct, valid namespace names; the schema rejects anything else.
+  #
   # Behaviour:
-  #   * Empty list (default): apps/deployments + core/configmaps grants
-  #     are emitted CLUSTER-WIDE on the ClusterRole (canonical Knative
-  #     source pattern; reconcile against any namespace).
-  #   * Non-empty list: the cluster-wide grants are REMOVED from the
-  #     ClusterRole and emitted ONLY as Role + RoleBinding pairs against
-  #     the listed namespaces. Reconciles against any other namespace
-  #     fail closed with RBAC-denied.
-
+  #   * Empty list (default): those write verbs are granted CLUSTER-WIDE on
+  #     the ClusterRole, so sources reconcile in any namespace.
+  #   * Non-empty list: the write verbs are granted ONLY through a Role +
+  #     RoleBinding in each listed namespace. A YipYapSource in any other
+  #     namespace is still seen, but its adapter Deployment cannot be
+  #     created; the source stays NotReady with an RBAC error.
+  #
+  # What scoping does NOT restrict:
+  #   * Reads. get/list/watch on Deployments and YipYapSources stay
+  #     cluster-wide, because the controller's informers list and watch every
+  #     namespace. The controller can still read every Deployment's spec.
+  #   * Events (create/patch) and YipYapSource status writes, which are
+  #     cluster-wide so the controller can report on sources anywhere.
+  #   * The release namespace. The controller always gets configmaps read
+  #     and leader-election leases there (controller-role.yaml), whether or
+  #     not it is listed. List it only if sources live in it.
+  #
   # The controller SA is NEVER granted Secret read at any level. The
   # receive-adapter Pod kubelet-resolves SecretKeyRef in the YipYapSource's
   # own namespace.
@@ -74,6 +93,16 @@ webhook:
   failurePolicy: Fail
   # Port the webhook listens on (canonical 8443).
   port: 8443
+  # Hosts a YipYapSource spec.baseURL may point at. The adapter sends the
+  # API key from spec.apiKeyRef to that URL, so only list YipYap endpoints
+  # you trust. The webhook rejects other hosts, plain http and URLs with
+  # user info, and the controller keeps such sources not ready. Entries:
+  #   console.yipyap.run      exact host, default https port (443)
+  #   yipyap.internal:8443    exact host on port 8443
+  #   "*.yipyap.example.com"  any subdomain (not the apex), port 443
+  # Matching is case-insensitive. The list must not be empty.
+  allowedBaseURLHosts:
+    - console.yipyap.run
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -137,8 +166,38 @@ priorityClassName: ""
 # CRD install toggle. Set false if you manage CRDs separately (e.g. via Argo/Flux).
 installCRD: true
 
-# NetworkPolicy for controller + webhook pods. Set to false in clusters
-# without a NetworkPolicy-aware CNI (some bare kubeadm installs) or when you
-# manage NetworkPolicies out-of-band.
+# NetworkPolicy for controller + webhook pods. On by default. Set enabled to
+# false in clusters without a NetworkPolicy-aware CNI or when you manage
+# NetworkPolicies out-of-band.
+
+# The kube-apiserver runs on a host or external IP, which pod and namespace
+# selectors never match, so its address range must be given as CIDRs. With
+# enabled=true and apiServerCIDRs empty, install fails with an error (unless
+# cilium.useEntities is true). Find the addresses with:
+
+#   kubectl get endpoints kubernetes -n default
+
+# and list each one as /32 (IPv4) or /128 (IPv6), or give the control plane
+# subnet. Example:
+
+#   networkPolicy:
+#     apiServerCIDRs: ["172.18.0.2/32"]
 networkPolicy:
   enabled: true
+  # CIDRs of the kube-apiserver endpoints. Controller and webhook egress to
+  # the API server is allowed only to these ranges.
+  apiServerCIDRs: []
+  # TCP ports the API server endpoints listen on (443 on most managed
+  # control planes, 6443 on kubeadm, k3s and kind).
+  apiServerPorts: [443, 6443]
+  # Source CIDRs allowed to call the webhook admission port. Empty means
+  # apiServerCIDRs. Set this when the API server reaches webhooks from a
+  # different range than the one it serves on (for example a managed
+  # control plane that connects from a separate subnet).
+  webhookIngressCIDRs: []
+  cilium:
+    # Also render CiliumNetworkPolicy objects that allow the Cilium
+    # kube-apiserver entity (egress from both pods, ingress to the webhook
+    # port). Requires the cilium.io/v2 CRDs. When true, apiServerCIDRs may be
+    # left empty.
+    useEntities: false

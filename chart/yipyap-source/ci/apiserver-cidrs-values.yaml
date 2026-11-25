@@ -1,0 +1,6 @@
+# Values for helm lint, helm template and chart tests. The NetworkPolicy is
+# on by default and needs the kube-apiserver address range. This
+# documentation range stands in for a real one.
+networkPolicy:
+  apiServerCIDRs:
+    - 192.0.2.10/32
