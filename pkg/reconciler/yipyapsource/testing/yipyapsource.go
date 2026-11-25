@@ -69,7 +69,7 @@ func WithYipYapSourceSpec(spec v1alpha1.YipYapSourceSpec) YipYapSourceOption {
 }
 
 // WithInitYipYapSourceConditions initializes the condition set so
-// SinkProvided/Deployed/Ready are each Unknown. Controllers do this on entry
+// BaseURLAllowed/SinkProvided/Deployed/Connected/Ready are each Unknown. Controllers do this on entry
 // to ReconcileKind.
 func WithInitYipYapSourceConditions(s *v1alpha1.YipYapSource) {
 	s.Status.InitializeConditions()
@@ -89,6 +89,18 @@ func WithYipYapSourceSinkNotFound(reason, msg string) YipYapSourceOption {
 	}
 }
 
+// WithYipYapSourceBaseURLAllowed marks BaseURLAllowed=True.
+func WithYipYapSourceBaseURLAllowed(s *v1alpha1.YipYapSource) {
+	s.Status.MarkBaseURLAllowed()
+}
+
+// WithYipYapSourceBaseURLNotAllowed marks BaseURLAllowed=False.
+func WithYipYapSourceBaseURLNotAllowed(reason, msg string) YipYapSourceOption {
+	return func(s *v1alpha1.YipYapSource) {
+		s.Status.MarkBaseURLNotAllowed(reason, "%s", msg)
+	}
+}
+
 // WithYipYapSourceDeployed marks Deployed=True.
 func WithYipYapSourceDeployed(s *v1alpha1.YipYapSource) {
 	s.Status.MarkDeployed()
@@ -105,6 +117,25 @@ func WithYipYapSourceNotDeployed(reason, msg string) YipYapSourceOption {
 func WithYipYapSourceDeploying(reason, msg string) YipYapSourceOption {
 	return func(s *v1alpha1.YipYapSource) {
 		s.Status.MarkDeploying(reason, "%s", msg)
+	}
+}
+
+// WithYipYapSourceConnected marks Connected=True.
+func WithYipYapSourceConnected(s *v1alpha1.YipYapSource) {
+	s.Status.MarkConnected()
+}
+
+// WithYipYapSourceNotConnected marks Connected=False with the given reason.
+func WithYipYapSourceNotConnected(reason, msg string) YipYapSourceOption {
+	return func(s *v1alpha1.YipYapSource) {
+		s.Status.MarkNotConnected(reason, "%s", msg)
+	}
+}
+
+// WithYipYapSourceConnecting marks Connected=Unknown with the given reason.
+func WithYipYapSourceConnecting(reason, msg string) YipYapSourceOption {
+	return func(s *v1alpha1.YipYapSource) {
+		s.Status.MarkConnecting(reason, "%s", msg)
 	}
 }
 
@@ -129,5 +160,21 @@ func WithYipYapSourceStatusObservedGeneration(gen int64) YipYapSourceOption {
 func WithYipYapSourceCloudEventAttributes(attrs []duckv1.CloudEventAttributes) YipYapSourceOption {
 	return func(s *v1alpha1.YipYapSource) {
 		s.Status.CloudEventAttributes = attrs
+	}
+}
+
+// WithYipYapSourceSinkAddress marks SinkProvided=True and records the sink
+// URI, CA certificates and OIDC audience.
+func WithYipYapSourceSinkAddress(addr *duckv1.Addressable) YipYapSourceOption {
+	return func(s *v1alpha1.YipYapSource) {
+		s.Status.MarkSinkAddress(addr)
+	}
+}
+
+// WithYipYapSourceOIDCIdentity records the adapter's OIDC ServiceAccount in
+// status.auth.
+func WithYipYapSourceOIDCIdentity(name string) YipYapSourceOption {
+	return func(s *v1alpha1.YipYapSource) {
+		s.Status.MarkOIDCIdentity(name)
 	}
 }

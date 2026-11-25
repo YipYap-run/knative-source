@@ -32,18 +32,35 @@ rules:
   - patch
   - delete
 
+# Adapter pods: list only, to find a source's adapter pod and read its
+# status endpoint for the Connected condition. No get, watch or writes.
 - apiGroups:
-  - rbac.authorization.k8s.io
+  - ""
   resources:
-  - clusterroles
+  - pods
   verbs:
   - list
 
+# Per-source OIDC ServiceAccounts, made only for a sink with an OIDC
+# audience. Get and create only: the controller never updates, deletes
+# (owner references let GC do that) or mints tokens for them.
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+  - create
+
+# The event recorder only creates events and patches the count on repeats.
 - apiGroups:
   - ""
   resources:
   - events
-  verbs: *everything
+  verbs:
+  - create
+  - update
+  - patch
 
 - apiGroups:
   - sources.yipyap.run
@@ -61,11 +78,31 @@ rules:
   - update
   - patch
 
-# ConfigMaps are needed cluster-wide for Knative-style observability config
-# discovery. Secrets are NOT included here: the controller never reads
-# Secret values in-process. The receive-adapter Pod kubelet-dereferences
-# the API key Secret in its own namespace via SecretKeyRef. Cluster-wide
-# secret read on the controller SA is therefore unused.
+# No configmaps or secrets rule. The controller reads only its own config
+# ConfigMaps, in the release namespace (Role below), and never reads Secret
+# values: the receive-adapter Pod resolves the API key Secret in its own
+# namespace through SecretKeyRef.
+
+---
+# Leader election takes a Lease in the release namespace only (client-go
+# LeaseLock: get, create, update). Keep it out of the ClusterRole so a
+# compromised controller cannot take over other components' leases.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: yipyap-source-controller
+  namespace: yipyap-sources
+  labels:
+    sources.yipyap.run/release: devel
+rules:
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - create
+  - update
 - apiGroups:
   - ""
   resources:
@@ -74,13 +111,6 @@ rules:
   - get
   - list
   - watch
-
-  # For Leader Election
-- apiGroups:
-    - coordination.k8s.io
-  resources:
-    - leases
-  verbs: *everything
 
 ---
 # The role is needed for the aggregated role source-observer in knative-eventing to provide readonly access to "Sources".
@@ -94,7 +124,7 @@ metadata:
     duck.knative.dev/source: "true"
 rules:
   - apiGroups:
-      - "sources.eventing.knative.dev"
+      - "sources.yipyap.run"
     resources:
       - "yipyapsources"
     verbs:

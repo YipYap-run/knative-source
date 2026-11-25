@@ -1,4 +1,13 @@
 {{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+{{- $useEntities := and $np.cilium $np.cilium.useEntities }}
+{{- if and (empty $np.apiServerCIDRs) (not $useEntities) }}
+{{- fail "networkPolicy.apiServerCIDRs is required when networkPolicy.enabled is true. Set it to your kube-apiserver address range (kubectl get endpoints kubernetes -n default), set networkPolicy.cilium.useEntities=true on Cilium, or set networkPolicy.enabled=false." }}
+{{- end }}
+{{- if empty $np.apiServerPorts }}
+{{- fail "networkPolicy.apiServerPorts must list at least one port when networkPolicy.enabled is true." }}
+{{- end }}
+{{- $webhookIngressCIDRs := $np.webhookIngressCIDRs | default $np.apiServerCIDRs }}
 # NetworkPolicy for the controller pod.
 
 # Ingress: controller is never called by external clients (no Service exposed
@@ -8,7 +17,12 @@
 # selector is configured, no metrics ingress rule is rendered, so scraping
 # is blocked from every other pod in the cluster.
 
-# Egress: kube-apiserver (for informers + reconcile writes) and DNS.
+# Egress: kube-apiserver (for informers + reconcile writes), DNS, and the
+# receive-adapter status endpoint (TCP 8080 on pods labeled
+# sources.yipyap.run/source, in any namespace), which the controller reads
+# for each source's Connected condition. The API server is matched by
+# networkPolicy.apiServerCIDRs because it runs on a host or external IP that
+# pod and namespace selectors never match.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -45,23 +59,31 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # kube-apiserver (typically on 443 or 6443).
+    # Receive-adapter status endpoints (Connected condition). The port is
+    # fixed in the adapter (resources.AdapterHTTPPort).
     - to:
         - namespaceSelector: {}
+          podSelector:
+            matchExpressions:
+              - key: sources.yipyap.run/source
+                operator: Exists
       ports:
         - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 6443
+          port: 8080
+    {{- if $np.apiServerCIDRs }}
+    # kube-apiserver.
+    - to:
+        {{- include "yipyap-source.ipBlockPeers" $np.apiServerCIDRs | trim | nindent 8 }}
+      ports:
+        {{- include "yipyap-source.tcpPorts" $np.apiServerPorts | trim | nindent 8 }}
+    {{- end }}
 ---
 # NetworkPolicy for the webhook pod.
 
 # Ingress:
-#   * kube-apiserver calls the webhook admission endpoint on :8443. The
-#     apiserver IP is not a stable NetworkPolicy selector across cluster
-#     topologies, so this single rule does allow `from: []` (any peer),
-#     scoped to the admission port. Operators who can pin their apiserver
-#     to a known IP / namespace should override this template.
+#   * kube-apiserver calls the webhook admission endpoint. Allowed only from
+#     networkPolicy.webhookIngressCIDRs, which defaults to
+#     networkPolicy.apiServerCIDRs.
 #   * Metrics scraping is gated on metrics.networkPolicy.ingressFromNamespaceLabels;
 #     no rule is rendered when the labels are empty (default-deny, same
 #     posture applied to the controller).
@@ -82,11 +104,14 @@ spec:
       role: yipyap-source-webhook
   policyTypes: [Ingress, Egress]
   ingress:
-    # kube-apiserver callback.
-    - from: []
+    {{- if $webhookIngressCIDRs }}
+    # kube-apiserver admission callback.
+    - from:
+        {{- include "yipyap-source.ipBlockPeers" $webhookIngressCIDRs | trim | nindent 8 }}
       ports:
         - protocol: TCP
           port: {{ .Values.webhook.port }}
+    {{- end }}
     {{- if and .Values.metrics.enabled .Values.metrics.networkPolicy.ingressFromNamespaceLabels }}
     # Metrics scrapers, label-scoped.
     - from:
@@ -98,6 +123,7 @@ spec:
           port: {{ .Values.metrics.port }}
     {{- end }}
   egress:
+    # DNS.
     - to:
         - namespaceSelector: {}
           podSelector:
@@ -108,11 +134,57 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    {{- if $np.apiServerCIDRs }}
+    # kube-apiserver.
     - to:
-        - namespaceSelector: {}
+        {{- include "yipyap-source.ipBlockPeers" $np.apiServerCIDRs | trim | nindent 8 }}
       ports:
-        - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 6443
+        {{- include "yipyap-source.tcpPorts" $np.apiServerPorts | trim | nindent 8 }}
+    {{- end }}
+{{- if $useEntities }}
+---
+# Cilium: allow the kube-apiserver entity. Cilium adds these allows to the
+# NetworkPolicy above, so they work with or without apiServerCIDRs.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: yipyap-source-controller-apiserver
+  namespace: {{ include "yipyap-source.namespace" . }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      app: yipyap-source-controller
+      control-plane: yipyap-source-controller-manager
+  egress:
+    - toEntities: [kube-apiserver]
+      toPorts:
+        - ports:
+            {{- include "yipyap-source.ciliumPorts" $np.apiServerPorts | trim | nindent 12 }}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: yipyap-source-webhook-apiserver
+  namespace: {{ include "yipyap-source.namespace" . }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      app: yipyap-source-webhook
+      role: yipyap-source-webhook
+  ingress:
+    - fromEntities: [kube-apiserver]
+      toPorts:
+        - ports:
+            - port: {{ .Values.webhook.port | quote }}
+              protocol: TCP
+  egress:
+    - toEntities: [kube-apiserver]
+      toPorts:
+        - ports:
+            {{- include "yipyap-source.ciliumPorts" $np.apiServerPorts | trim | nindent 12 }}
+{{- end }}
 {{- end }}

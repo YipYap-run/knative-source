@@ -1,0 +1,48 @@
+{{- /*
+Release-namespace Role for the webhook. The knative.dev/pkg webhook reads
+its serving-cert Secret through the namespacedkube informer (scoped to
+SYSTEM_NAMESPACE), the certificates reconciler updates that one Secret,
+sharedmain reads its config ConfigMaps from the same namespace, and leader
+election takes a Lease there. None of this needs cluster-wide access.
+*/}}
+{{- $sa := include "yipyap-source.webhookServiceAccountName" . -}}
+{{- $ns := include "yipyap-source.namespace" . -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $sa }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+rules:
+  # Informer list/watch cannot be narrowed by name.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["list", "watch"]
+  # The Secret is created by the chart; the webhook only fills it in.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["yipyap-source-webhook-certs"]
+    verbs: ["get", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $sa }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $sa }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ $ns }}

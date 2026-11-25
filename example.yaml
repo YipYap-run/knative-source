@@ -26,4 +26,4 @@ spec:
   filter:
     types:
       - run.yipyap.alert.*
-      - run.yipyap.monitor.state
+      - run.yipyap.monitor.*

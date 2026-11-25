@@ -19,54 +19,20 @@ metadata:
   labels:
     sources.yipyap.run/release: devel
 rules:
-  # Sources admin
+  # Admission only reads YipYapSources. It never writes them, their status
+  # or their finalizers; that is the controller's job.
   - apiGroups:
       - sources.yipyap.run
     resources:
       - yipyapsources
-    verbs: &everything
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-
-  # Sources finalizer
-  - apiGroups:
-      - sources.yipyap.run
-    resources:
-      - yipyapsources/finalizers
-    verbs: *everything
-
-  # Source statuses update
-  - apiGroups:
-      - sources.yipyap.run
-    resources:
-      - yipyapsources/status
-    verbs:
-      - get
-      - update
-      - patch
-
-  # Webhook does NOT reconcile Deployments; that is the controller's job.
-
-  # Service read for webhook target service discovery.
-  - apiGroups:
-      - ""
-    resources:
-      - services
     verbs:
       - get
       - list
       - watch
 
-  # Webhook reads ONLY its own (system) namespace at startup to attach
-  # OwnerReferences to its admission ConfigMaps + ValidatingWebhookConfigs.
-  # The upstream knative.dev/pkg webhook never calls Patch/Update on
-  # Namespaces. Scope by resourceNames to the
-  # release namespace.
+  # The webhook reads ONLY its own (system) namespace at startup to attach
+  # OwnerReferences to its webhook configurations. Scoped by resourceNames
+  # to the release namespace.
   - apiGroups:
       - ""
     resources:
@@ -76,36 +42,35 @@ rules:
     verbs:
       - get
 
-  # Events admin + ConfigMaps for observability discovery.
+  # Validation asks the API server whether the requesting user may get the
+  # Secret named by spec.apiKeyRef, so a user cannot point the adapter at a
+  # Secret they cannot read themselves.
   - apiGroups:
-      - ""
+      - authorization.k8s.io
     resources:
-      - events
-      - configmaps
-    verbs: *everything
-
-  # EventTypes admin
-  - apiGroups:
-      - eventing.knative.dev
-    resources:
-      - eventtypes
-    verbs: *everything
-
-  # Webhook manages its own cert secret only.
-  - apiGroups:
-      - ""
-    resources:
-      - "secrets"
+      - subjectaccessreviews
     verbs:
-      - "get"
-      - "create"
-      - "update"
+      - create
+
+  # No events rule: the knative.dev/pkg webhook, certificate and
+  # leader-election code paths never record Kubernetes events.
+
+  # The defaulting, validation and configmaps admission controllers use
+  # cluster-wide webhook configuration informers. An informer issues an
+  # unfiltered LIST and WATCH, which resourceNames cannot authorize, so
+  # without this rule the informers never sync and every admission request
+  # hangs.
+  - apiGroups:
+      - "admissionregistration.k8s.io"
+    resources:
+      - "mutatingwebhookconfigurations"
+      - "validatingwebhookconfigurations"
+    verbs:
       - "list"
       - "watch"
 
-  # Webhook registration scoped to this source's own webhookconfigurations
-  # only. Cert controller needs get/update/patch to
-  # inject the CA bundle; never list/create/delete or other configs.
+  # Writes stay restricted to this source's own webhook configurations. The
+  # reconcilers need get, update and patch to inject the CA bundle and rules.
   - apiGroups:
       - "admissionregistration.k8s.io"
     resources:
@@ -120,9 +85,51 @@ rules:
       - "update"
       - "patch"
 
-  # For Leader Election
+---
+# Release-namespace grants. The knative.dev/pkg webhook reads its
+# serving-cert Secret through the namespacedkube informer (scoped to
+# SYSTEM_NAMESPACE), the certificates reconciler updates that one Secret,
+# sharedmain reads its config ConfigMaps from the same namespace, and leader
+# election takes a Lease there. None of this needs cluster-wide access.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: yipyap-source-webhook
+  namespace: yipyap-sources
+  labels:
+    sources.yipyap.run/release: devel
+rules:
+  # Informer list/watch cannot be narrowed by name.
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - list
+      - watch
+  # The Secret ships with the install; the webhook only fills it in.
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    resourceNames:
+      - yipyap-source-webhook-certs
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
   - apiGroups:
       - coordination.k8s.io
     resources:
       - leases
-    verbs: *everything
+    verbs:
+      - get
+      - create
+      - update

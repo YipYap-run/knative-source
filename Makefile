@@ -13,8 +13,13 @@
 # limitations under the License.
 
 # Pinned Kubernetes API-server version for envtest. Matches k8s.io/* module
-# versions in go.mod; bump together.
-ENVTEST_K8S_VERSION ?= 1.31.0
+# versions in go.mod (v0.35 is Kubernetes 1.35); bump together.
+ENVTEST_K8S_VERSION ?= 1.35.0
+
+# setup-envtest from the controller-runtime release branch that matches
+# sigs.k8s.io/controller-runtime in go.mod (v0.23). It has no release tags,
+# so it is pinned to a commit.
+SETUP_ENVTEST_VERSION ?= v0.0.0-20251218032627-56d9e70af999
 
 # Path to the setup-envtest helper. Installed on demand into $GOPATH/bin.
 GOBIN ?= $(shell go env GOPATH)/bin
@@ -35,7 +40,7 @@ test:
 setup-envtest: $(SETUP_ENVTEST)
 
 $(SETUP_ENVTEST):
-	GOFLAGS=-mod=mod go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	GOFLAGS=-mod=mod go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(SETUP_ENVTEST_VERSION)
 
 # test-envtest runs the envtest-tagged suite against a real kube-apiserver +
 # etcd pair. Binaries are fetched once and cached in

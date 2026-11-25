@@ -1,3 +1,19 @@
+/*
+Copyright 2026 The YipYap Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package source
 
 import (
@@ -26,8 +42,8 @@ func newTestStreamClient(_ *testing.T, baseURL, apiKey string, filters ...string
 	}
 }
 
-// writeNDJSON writes v as a single NDJSON line and flushes. The server-side
-// stream handler does the same pattern — tests mimic it here.
+// writeNDJSON writes v as a single NDJSON line and flushes, the same way the
+// server's stream handler writes events.
 func writeNDJSON(w http.ResponseWriter, v interface{}) error {
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -108,8 +124,8 @@ func TestStreamClient_Reconnects(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		if n == 1 {
 			_ = writeNDJSON(w, makeEvent(t, "run.yipyap.alert.firing"))
-			// Close by returning from the handler — the response body
-			// gets a final EOF on the client side.
+			// Returning from the handler closes the response, so the
+			// client reads EOF.
 			return
 		}
 		_ = writeNDJSON(w, makeEvent(t, "run.yipyap.alert.resolved"))
@@ -207,10 +223,15 @@ func TestStreamClient_FilterQueryParams(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var gotFilters []string
+			var (
+				mu         sync.Mutex
+				gotFilters []string
+			)
 			stop := make(chan struct{})
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
 				gotFilters = r.URL.Query()["filter"]
+				mu.Unlock()
 				w.Header().Set("Content-Type", "application/cloudevents-batch+json")
 				w.WriteHeader(http.StatusOK)
 				select {
@@ -225,6 +246,8 @@ func TestStreamClient_FilterQueryParams(t *testing.T) {
 			defer cancel()
 			_ = c.stream(ctx, func(_ context.Context, _ ce.Event) error { return nil })
 
+			mu.Lock()
+			defer mu.Unlock()
 			if len(gotFilters) != len(tc.want) {
 				t.Fatalf("filter query: got %v, want %v", gotFilters, tc.want)
 			}

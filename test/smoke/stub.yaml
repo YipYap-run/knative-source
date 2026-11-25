@@ -1,0 +1,76 @@
+# Stand-in YipYap API and CloudEvents sink for the smoke test. smoke.sh
+# creates the namespace, the stub-tls Secret (tls.crt, tls.key) and the
+# stub-api-key Secret before applying this file.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yipyap-stub
+  namespace: yipyap-smoke
+  labels:
+    app: yipyap-stub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: yipyap-stub
+  template:
+    metadata:
+      labels:
+        app: yipyap-stub
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: stub
+          image: smoke.local/knative-source-stub:smoke
+          imagePullPolicy: Never
+          env:
+            - name: STUB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stub-api-key
+                  key: api-key
+            - name: STUB_TLS_DIR
+              value: /tls
+          ports:
+            - name: https
+              containerPort: 8443
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+      volumes:
+        - name: tls
+          secret:
+            secretName: stub-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: yipyap-stub
+  namespace: yipyap-smoke
+spec:
+  selector:
+    app: yipyap-stub
+  ports:
+    - name: https
+      port: 443
+      targetPort: https
+    - name: http
+      port: 80
+      targetPort: http

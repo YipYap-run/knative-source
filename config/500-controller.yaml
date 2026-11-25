@@ -72,7 +72,10 @@ spec:
           - name: METRICS_DOMAIN
             value: knative.dev/sources
           - name: YIPYAP_SOURCE_RA_IMAGE
-            value: ko://github.com/YipYap-run/knative-source/cmd/receive_adapter
+            value: ko://github.com/YipYap-run/knative-source/cmd/receive-adapter
+          # Comma separated hosts YipYapSource spec.baseURL may use.
+          - name: YIPYAP_ALLOWED_BASE_URL_HOSTS
+            value: console.yipyap.run
           - name: POD_NAME
             valueFrom:
               fieldRef:

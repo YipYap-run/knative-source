@@ -2,6 +2,13 @@ Thanks for installing {{ .Chart.Name }} {{ .Chart.Version }}.
 
 The controller and admission webhook are running in namespace:
   {{ include "yipyap-source.namespace" . }}
+{{- if .Values.networkPolicy.enabled }}
+
+NetworkPolicy is on. The controller and webhook reach the kube-apiserver at:
+  {{ default (list "(none, Cilium kube-apiserver entity only)") .Values.networkPolicy.apiServerCIDRs | join ", " }} on TCP {{ .Values.networkPolicy.apiServerPorts | join ", " }}
+If the controller logs connection timeouts or admission requests time out,
+check these ranges against `kubectl get endpoints kubernetes -n default`.
+{{- end }}
 
 Next steps:
 

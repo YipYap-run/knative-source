@@ -24,29 +24,45 @@ namespace.create=false and supplied --namespace themselves.
 {{- end -}}
 
 {{/*
-Controller image: repo:tag (tag falls back to AppVersion).
+Image reference for one entry of .Values.images. Takes a dict with name
+(the values key), image (the entry) and appVersion. Renders
+repository@digest when digest is set, else repository:tag with tag falling
+back to appVersion. Setting both tag and digest fails the install, since
+the tag would be silently ignored.
+*/}}
+{{- define "yipyap-source.image" -}}
+{{- $img := .image -}}
+{{- if $img.digest -}}
+{{- if $img.tag -}}
+{{- fail (printf "images.%s: set either tag or digest, not both (to deploy a tag, also set images.%s.digest=\"\")" .name .name) -}}
+{{- end -}}
+{{ $img.repository }}@{{ $img.digest }}
+{{- else -}}
+{{ $img.repository }}:{{ $img.tag | default .appVersion }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Controller image.
 */}}
 {{- define "yipyap-source.controllerImage" -}}
-{{- $tag := .Values.images.controller.tag | default .Chart.AppVersion -}}
-{{ .Values.images.controller.repository }}:{{ $tag }}
+{{- include "yipyap-source.image" (dict "name" "controller" "image" .Values.images.controller "appVersion" .Chart.AppVersion) -}}
 {{- end -}}
 
 {{/*
-Webhook image: repo:tag.
+Webhook image.
 */}}
 {{- define "yipyap-source.webhookImage" -}}
-{{- $tag := .Values.images.webhook.tag | default .Chart.AppVersion -}}
-{{ .Values.images.webhook.repository }}:{{ $tag }}
+{{- include "yipyap-source.image" (dict "name" "webhook" "image" .Values.images.webhook "appVersion" .Chart.AppVersion) -}}
 {{- end -}}
 
 {{/*
-Receive-adapter image: repo:tag. Consumed by the controller via
+Receive-adapter image. Consumed by the controller via
 YIPYAP_SOURCE_RA_IMAGE; the controller stamps it into the per-source
 Deployment it reconciles.
 */}}
 {{- define "yipyap-source.adapterImage" -}}
-{{- $tag := .Values.images.adapter.tag | default .Chart.AppVersion -}}
-{{ .Values.images.adapter.repository }}:{{ $tag }}
+{{- include "yipyap-source.image" (dict "name" "adapter" "image" .Values.images.adapter "appVersion" .Chart.AppVersion) -}}
 {{- end -}}
 
 {{/*
@@ -58,4 +74,48 @@ ServiceAccount names.
 
 {{- define "yipyap-source.webhookServiceAccountName" -}}
 {{- .Values.serviceAccounts.webhook.name -}}
+{{- end -}}
+
+{{/*
+NetworkPolicy peers, one ipBlock per CIDR. Takes the CIDR list.
+*/}}
+{{- define "yipyap-source.ipBlockPeers" -}}
+{{- range . }}
+- ipBlock:
+    cidr: {{ . | quote }}
+{{- end }}
+{{- end -}}
+
+{{/*
+NetworkPolicy TCP ports. Takes the port list.
+*/}}
+{{- define "yipyap-source.tcpPorts" -}}
+{{- range . }}
+- protocol: TCP
+  port: {{ int . }}
+{{- end }}
+{{- end -}}
+
+{{/*
+CiliumNetworkPolicy TCP ports (Cilium takes ports as strings). Takes the
+port list.
+*/}}
+{{- define "yipyap-source.ciliumPorts" -}}
+{{- range . }}
+- port: {{ int . | toString | quote }}
+  protocol: TCP
+{{- end }}
+{{- end -}}
+
+{{/*
+Comma separated base URL host allowlist for YIPYAP_ALLOWED_BASE_URL_HOSTS
+on the webhook and controller. Fails the install when the list is empty,
+since an empty allowlist would reject every YipYapSource.
+*/}}
+{{- define "yipyap-source.allowedBaseURLHosts" -}}
+{{- $hosts := .Values.webhook.allowedBaseURLHosts | default list -}}
+{{- if not $hosts -}}
+{{- fail "webhook.allowedBaseURLHosts must list at least one host (default: console.yipyap.run)" -}}
+{{- end -}}
+{{- join "," $hosts -}}
 {{- end -}}

@@ -1,4 +1,6 @@
 version: 2
+# Dependabot cannot read .ko.yaml, so the ko base image digest is refreshed
+# by .github/workflows/base-image.yaml instead.
 updates:
   - package-ecosystem: "gomod"
     directory: "/"
