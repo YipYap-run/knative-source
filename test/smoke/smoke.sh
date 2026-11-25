@@ -253,6 +253,17 @@ EOF
   kubectl -n "${RELEASE_NS}" wait --for=condition=Available deployment --all --timeout=300s
 }
 
+wait_for_webhook() {
+  for _ in $(seq 1 90); do
+    if kubectl -n "${RELEASE_NS}" get endpoints yipyap-source-webhook \
+      -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null | grep -q .; then
+      return 0
+    fi
+    sleep 2
+  done
+  die "webhook service has no ready endpoints"
+}
+
 # source_manifest prints example.yaml with spec.baseURL set to $1 and the
 # sink pointed at the stub. A Broker sink needs a broker implementation in
 # the cluster, which this job does not install; the conformance workflow
@@ -284,6 +295,8 @@ step_source() {
   kubectl -n "${RELEASE_NS}" create secret generic yipyap-creds \
     --from-file=api-key="${WORK}/api-key" --dry-run=client -o yaml |
     kubectl apply -f - > /dev/null
+
+  wait_for_webhook
 
   log "checking that base URLs outside the policy are rejected"
   # The webhook enforces the host allowlist.
