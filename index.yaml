@@ -3,6 +3,52 @@ entries:
   yipyap-source:
   - annotations:
       artifacthub.io/changes: |
+        - CRD schema rejects unknown fields at the apiserver.
+        - The controller never reads Secrets; scopedNamespaces limits
+          Deployment writes to the listed namespaces while reads stay
+          cluster-wide.
+        - NetworkPolicy is on by default. Set networkPolicy.apiServerCIDRs
+          or the install fails with a message naming the value.
+        - spec.baseURL must be https and on the operator allowlist
+          (webhook.allowedBaseURLHosts, default console.yipyap.run), and
+          the requesting user must be able to read the API key Secret.
+        - Both deployments run under the PSS-restricted profile with
+          seccomp and readOnlyRootFilesystem.
+        - Webhook HA: replicas=2 plus a PodDisruptionBudget so
+          failurePolicy=Fail does not make the webhook a single point of
+          failure during rolling updates.
+        - Tag-driven release workflow with Chart.yaml/tag lockstep
+          enforcement.
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Documentation
+          url: https://docs.yipyap.run/integrations/knative/source-crd/
+    apiVersion: v2
+    appVersion: 1.4.0
+    created: "2026-11-25T20:14:56.237859845Z"
+    description: YipYapSource CRD + controller for the Knative Eventing source.
+    digest: e6b523e9970fa293d800a69944c9957425d8a693dded69a74b7f191414c976fd
+    home: https://yipyap.run
+    icon: https://yipyap.run/icon.png
+    keywords:
+    - yipyap
+    - knative
+    - cloudevents
+    - eventing
+    - source
+    - observability
+    maintainers:
+    - name: YipYap
+      url: https://yipyap.run
+    name: yipyap-source
+    sources:
+    - https://github.com/YipYap-run/knative-source
+    type: application
+    urls:
+    - yipyap-source-1.4.0.tgz
+    version: 1.4.0
+  - annotations:
+      artifacthub.io/changes: |
         - Bidirectional reply support: the controller stamps the receive
           adapter image at appVersion to consume reply CloudEvents from
           the configured sink.
@@ -90,4 +136,4 @@ entries:
     urls:
     - yipyap-source-1.1.0.tgz
     version: 1.1.0
-generated: "2026-04-25T09:51:30.558727676Z"
+generated: "2026-11-25T20:14:56.237872759Z"
