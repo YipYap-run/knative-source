@@ -4,8 +4,9 @@
 
 # Base image pinning: we pin by SHA256 digest, not
 # by `:latest`. `:latest` here would silently move to whatever Chainguard
-# ships next, defeating reproducible-build goals. To bump, update both the
-# digest and the human-readable comment.
+# ships next, defeating reproducible-build goals. The weekly
+# .github/workflows/base-image.yaml job runs hack/bump-base-image.sh and
+# opens a PR when :latest moves; to bump by hand, run that script.
 
 # Current pin: cgr.dev/chainguard/static:latest as of 2026-04-24.
 

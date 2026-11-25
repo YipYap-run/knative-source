@@ -1,6 +1,23 @@
+/*
+Copyright 2026 The YipYap Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package source
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -105,7 +122,7 @@ func TestPollClient_CursorPersistence(t *testing.T) {
 		t.Fatalf("cursor roundtrip: got %q, want %q", got, want)
 	}
 
-	// Overwrite check — writeCursor must be idempotent per call.
+	// Overwrite check: each writeCursor call replaces the previous value.
 	if err := c.writeCursor("cursor-new"); err != nil {
 		t.Fatalf("writeCursor 2: %v", err)
 	}
@@ -259,5 +276,21 @@ func TestPollClient_CursorAtomicWrite(t *testing.T) {
 	}
 	if string(b) != "abc" {
 		t.Fatalf("cursor content: got %q, want 'abc'", string(b))
+	}
+}
+
+// TestPollClient_RunNonPositiveIntervalDoesNotPanic: Run assigns the resolved
+// interval directly to the client, so the ticker must guard against 0 and
+// negative values instead of letting time.NewTicker panic.
+func TestPollClient_RunNonPositiveIntervalDoesNotPanic(t *testing.T) {
+	for _, d := range []time.Duration{0, -time.Second} {
+		c := newTestPollClient(t, "http://127.0.0.1:1", "k")
+		c.interval = d
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		err := c.Run(ctx, func(context.Context, ce.Event) error { return nil })
+		cancel()
+		if err == nil {
+			t.Errorf("interval %v: Run returned nil, want context error", d)
+		}
 	}
 }

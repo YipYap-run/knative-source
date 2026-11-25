@@ -1,18 +1,30 @@
+/*
+Copyright 2026 The YipYap Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 // Package source is the importable library behind the yipyap-knative-source
 // binary. It exports the runtime entry point (Run), the Config loader, and
-// the poll/stream/sink clients so that integration tests and the Phase-4
-// controller can drive the same code paths without shelling out to a
-// subprocess.
+// the poll/stream/sink clients so that tests can drive the same code paths
+// in-process instead of starting the binary.
 package source
 
 import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 	"time"
-
-	ce "github.com/cloudevents/sdk-go/v2"
 )
 
 // MinRefreshAfter bounds the mode-refresh window from below so a
@@ -32,27 +44,39 @@ const ResolveErrBackoff = 30 * time.Second
 // context capped at the resolution's RefreshAfter window. When the window
 // elapses (or the transport returns early) the loop re-resolves.
 //
-// Run is the sole entry point intended for external callers (main, tests,
-// Phase-4 controller). It owns nothing that survives ctx cancellation: the
+// When ctx ends (SIGTERM), the transports stop fetching, give the in-flight
+// event up to cfg.ShutdownGrace to reach the sink, confirm it, and return.
+//
+// Run is the sole entry point intended for external callers (main and
+// tests). It owns nothing that survives ctx cancellation: the
 // sink client, mode resolver, and per-session transport are all scoped to
 // the loop.
 func Run(ctx context.Context, cfg *Config) error {
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+	httpClient := newServerClient(30 * time.Second)
 
-	sink := NewSinkClient(cfg)
-	emit := func(ctx context.Context, ev ce.Event) error {
-		if err := sink.Send(ctx, ev); err != nil {
-			slog.Warn("sink send failed",
-				"ce-id", ev.ID(),
-				"ce-type", ev.Type(),
-				"sink", cfg.Sink,
-				"error", err,
-			)
-			return err
-		}
-		slog.Debug("sink send ok", "ce-id", ev.ID(), "ce-type", ev.Type())
-		return nil
+	if cfg.SourceID == "" {
+		slog.Warn("YIPYAP_SOURCE_ID is not set; the server cannot track delivery for this source separately")
 	}
+	sink := NewSinkClient(cfg)
+	// emit retries each event in place until the sink accepts or rejects it
+	// (or shutdown ends delivery). Poll and stream only confirm an event to
+	// the server after emit returns nil or ErrRejected.
+	emit := NewDeliverer(sink.Send, DefaultStats).Deliver
+	// Delivery and confirmation run on a context that only ends ShutdownGrace
+	// after ctx does. A mode refresh ends the session (no more fetching) but
+	// must not cut short an event the sink is still retrying, or the event
+	// would be redelivered (poll) or, against a server without since= support,
+	// lost (stream).
+	dctx, cancelDelivery := deliveryContext(ctx, cfg.ShutdownGrace)
+	defer cancelDelivery()
+	// One confirmer for the run, so its "no ack endpoint" warning is logged
+	// once per process rather than once per refresh window.
+	conf := newConfirmer(cfg)
+	// One poll client and one stream client for the whole run, so the last
+	// confirmed cursor survives mode refreshes (even when writing it to disk
+	// failed) and is sent as since= on the next request.
+	var pollClient *PollClient
+	var streamClient *StreamClient
 
 	for ctx.Err() == nil {
 		res, err := ResolveMode(ctx, cfg, httpClient, time.Now)
@@ -83,14 +107,21 @@ func Run(ctx context.Context, cfg *Config) error {
 		sessionCtx, cancel := context.WithTimeout(ctx, refresh)
 		switch res.Mode {
 		case "poll":
-			client := NewPollClient(cfg)
-			client.interval = res.PollInterval
-			if err := client.Run(sessionCtx, emit); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			if pollClient == nil {
+				pollClient = NewPollClient(cfg)
+				pollClient.confirm = conf
+			}
+			pollClient.interval = safePollInterval(res.PollInterval)
+			pollClient.health.SetPollInterval(pollClient.interval)
+			if err := pollClient.runWith(sessionCtx, dctx, emit); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 				slog.Warn("poll client exited with error", "error", err)
 			}
 		case "stream":
-			client := NewStreamClient(cfg)
-			if err := client.run(sessionCtx, emit); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			if streamClient == nil {
+				streamClient = NewStreamClient(cfg)
+				streamClient.confirm = conf
+			}
+			if err := streamClient.runWith(sessionCtx, dctx, emit); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 				slog.Warn("stream client exited with error", "error", err)
 			}
 		default:

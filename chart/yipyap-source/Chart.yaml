@@ -21,14 +21,16 @@ maintainers:
 annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
-    - Bidirectional reply support: the controller stamps the receive
-      adapter image at appVersion to consume reply CloudEvents from
-      the configured sink.
-    - Chart hardening: CRD schema rejects unknown fields at the
-      apiserver; controller no longer reads cluster-wide Secrets;
-      scopedNamespaces narrows the ClusterRole when set; NetworkPolicy
-      default-denies metrics ingress unless labels are configured;
-      both deployments run under the PSS-restricted profile with
+    - CRD schema rejects unknown fields at the apiserver.
+    - The controller never reads Secrets; scopedNamespaces limits
+      Deployment writes to the listed namespaces while reads stay
+      cluster-wide.
+    - NetworkPolicy is on by default. Set networkPolicy.apiServerCIDRs
+      or the install fails with a message naming the value.
+    - spec.baseURL must be https and on the operator allowlist
+      (webhook.allowedBaseURLHosts, default console.yipyap.run), and
+      the requesting user must be able to read the API key Secret.
+    - Both deployments run under the PSS-restricted profile with
       seccomp and readOnlyRootFilesystem.
     - Webhook HA: replicas=2 plus a PodDisruptionBudget so
       failurePolicy=Fail does not make the webhook a single point of

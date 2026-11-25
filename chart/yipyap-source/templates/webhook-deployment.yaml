@@ -75,6 +75,8 @@ spec:
               value: yipyap-source-webhook-certs
             - name: WEBHOOK_PORT
               value: {{ .Values.webhook.port | quote }}
+            - name: YIPYAP_ALLOWED_BASE_URL_HOSTS
+              value: {{ include "yipyap-source.allowedBaseURLHosts" . | quote }}
             - name: POD_NAME
               valueFrom:
                 fieldRef:

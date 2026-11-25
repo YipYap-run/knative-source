@@ -1,3 +1,8 @@
+{{- /*
+Cluster-scoped grants for the admission webhook. Namespaced grants
+(serving-cert Secret, config ConfigMaps, leader-election Leases) live in
+webhook-role.yaml and apply to the release namespace only.
+*/}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -5,53 +10,42 @@ metadata:
   labels:
     {{- include "yipyap-source.labels" . | nindent 4 }}
 rules:
+  # Admission only reads YipYapSources. It never writes them, their status
+  # or their finalizers; that is the controller's job.
   - apiGroups: ["sources.yipyap.run"]
     resources: ["yipyapsources"]
-    verbs: &everything ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-  - apiGroups: ["sources.yipyap.run"]
-    resources: ["yipyapsources/finalizers"]
-    verbs: *everything
-
-  - apiGroups: ["sources.yipyap.run"]
-    resources: ["yipyapsources/status"]
-    verbs: ["get", "update", "patch"]
-
-  # Webhook does not reconcile Deployments; that is the controller's job.
-  # Previously granted CRUD; removed as unused.
-
-  - apiGroups: [""]
-    resources: ["services"]
     verbs: ["get", "list", "watch"]
 
-  # Webhook reads ONLY its own (system) namespace at startup to attach
-  # OwnerReferences to its admission ConfigMaps + ValidatingWebhookConfigs.
-  # The upstream knative.dev/pkg webhook never calls Patch/Update on
-  # Namespaces, so we grant `get` only, scoped by resourceNames to the
-  # chart's release namespace.
+  # The webhook reads ONLY its own (system) namespace at startup to attach
+  # OwnerReferences to its webhook configurations. Scoped by resourceNames
+  # to the release namespace.
   - apiGroups: [""]
     resources: ["namespaces"]
     resourceNames:
       - {{ include "yipyap-source.namespace" . | quote }}
     verbs: ["get"]
 
-  - apiGroups: [""]
-    resources: ["events", "configmaps"]
-    verbs: *everything
+  # Validation asks the API server whether the requesting user may get the
+  # Secret named by spec.apiKeyRef, so a user cannot point the adapter at a
+  # Secret they cannot read themselves.
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["create"]
 
-  - apiGroups: ["eventing.knative.dev"]
-    resources: ["eventtypes"]
-    verbs: *everything
+  # No events rule: the knative.dev/pkg webhook, certificate and
+  # leader-election code paths never record Kubernetes events.
 
-  # Webhook manages its own cert secret.
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "create", "update", "list", "watch"]
+  # The defaulting, validation and configmaps admission controllers use
+  # cluster-wide webhook configuration informers. An informer issues an
+  # unfiltered LIST and WATCH, which resourceNames cannot authorize, so
+  # without this rule the informers never sync and every admission request
+  # hangs.
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+    verbs: ["list", "watch"]
 
-  # Webhook registration scoped to this source's own webhookconfigurations
-  #. The Knative cert controller needs get+update+patch
-  # to inject the CA bundle into its own admission configs; it never needs
-  # list/create/delete or access to any other webhook configs in the cluster.
+  # Writes stay restricted to this source's own webhook configurations. The
+  # reconcilers need get, update and patch to inject the CA bundle and rules.
   - apiGroups: ["admissionregistration.k8s.io"]
     resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
     resourceNames:
@@ -59,8 +53,3 @@ rules:
       - "validation.webhook.sources.yipyap.run"
       - "config.webhook.sources.yipyap.run"
     verbs: ["get", "update", "patch"]
-
-  # Leader election.
-  - apiGroups: ["coordination.k8s.io"]
-    resources: ["leases"]
-    verbs: *everything

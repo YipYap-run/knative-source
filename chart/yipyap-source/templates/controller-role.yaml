@@ -1,0 +1,40 @@
+{{- /*
+Release-namespace Role for the controller. Leader election takes a Lease in
+SYSTEM_NAMESPACE only (client-go LeaseLock: get, create, update), and
+sharedmain reads its config ConfigMaps (config-logging,
+config-observability, config-leader-election) from the same namespace. These
+grants must not be cluster-wide, or a compromised controller could take over
+other components' leader-election leases.
+*/}}
+{{- $sa := include "yipyap-source.controllerServiceAccountName" . -}}
+{{- $ns := include "yipyap-source.namespace" . -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $sa }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "create", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $sa }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "yipyap-source.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $sa }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ $ns }}
