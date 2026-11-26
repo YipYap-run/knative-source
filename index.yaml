@@ -24,6 +24,52 @@ entries:
         - name: Documentation
           url: https://docs.yipyap.run/integrations/knative/source-crd/
     apiVersion: v2
+    appVersion: 1.4.2
+    created: "2026-11-26T10:58:17.79001137Z"
+    description: YipYapSource CRD + controller for the Knative Eventing source.
+    digest: 9c9f8d39aa6acef274e3ae1f42f60907a341b0a27bd213b34f8b2cf75c896a0c
+    home: https://yipyap.run
+    icon: https://yipyap.run/icon.png
+    keywords:
+    - yipyap
+    - knative
+    - cloudevents
+    - eventing
+    - source
+    - observability
+    maintainers:
+    - name: YipYap
+      url: https://yipyap.run
+    name: yipyap-source
+    sources:
+    - https://github.com/YipYap-run/knative-source
+    type: application
+    urls:
+    - yipyap-source-1.4.2.tgz
+    version: 1.4.2
+  - annotations:
+      artifacthub.io/changes: |
+        - CRD schema rejects unknown fields at the apiserver.
+        - The controller never reads Secrets; scopedNamespaces limits
+          Deployment writes to the listed namespaces while reads stay
+          cluster-wide.
+        - NetworkPolicy is on by default. Set networkPolicy.apiServerCIDRs
+          or the install fails with a message naming the value.
+        - spec.baseURL must be https and on the operator allowlist
+          (webhook.allowedBaseURLHosts, default console.yipyap.run), and
+          the requesting user must be able to read the API key Secret.
+        - Both deployments run under the PSS-restricted profile with
+          seccomp and readOnlyRootFilesystem.
+        - Webhook HA: replicas=2 plus a PodDisruptionBudget so
+          failurePolicy=Fail does not make the webhook a single point of
+          failure during rolling updates.
+        - Tag-driven release workflow with Chart.yaml/tag lockstep
+          enforcement.
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Documentation
+          url: https://docs.yipyap.run/integrations/knative/source-crd/
+    apiVersion: v2
     appVersion: 1.4.1
     created: "2026-11-26T09:17:59.782477513Z"
     description: YipYapSource CRD + controller for the Knative Eventing source.
@@ -182,4 +228,4 @@ entries:
     urls:
     - yipyap-source-1.1.0.tgz
     version: 1.1.0
-generated: "2026-11-26T09:17:59.782492411Z"
+generated: "2026-11-26T10:58:17.790022102Z"
