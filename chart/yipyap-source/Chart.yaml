@@ -2,8 +2,8 @@ apiVersion: v2
 name: yipyap-source
 description: YipYapSource CRD + controller for the Knative Eventing source.
 type: application
-version: 1.4.1
-appVersion: 1.4.1
+version: 1.4.2
+appVersion: 1.4.2
 home: https://yipyap.run
 sources:
   - https://github.com/YipYap-run/knative-source
